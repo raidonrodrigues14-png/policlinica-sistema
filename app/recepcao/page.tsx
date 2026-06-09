@@ -174,7 +174,7 @@ export default function RecepcaoPage() {
     setTimeout(() => { setMsg(''); setAba('fila') }, 3000)
   }
 
-  const cor    = { recepcionista:'#22c55e', enfermeiro:'#3b82f6', medico:'#ec4899', gestor:'#f59e0b' }[usuario.perfil] || '#3ECF8E'
+  const cor = { recepcionista:'#22c55e', enfermeiro:'#3b82f6', medico:'#ec4899', gestor:'#f59e0b' }[usuario.perfil as keyof { recepcionista: string; enfermeiro: string; medico: string; gestor: string }] || '#3ECF8E'
   const ini    = usuario.nome.split(' ').map((n:string) => n[0]).slice(0,2).join('')
   const inp:any = { padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:13, width:'100%', outline:'none', fontFamily:'inherit' }
   const lbl:any = { fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4, letterSpacing:'.03em' }

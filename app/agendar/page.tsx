@@ -174,7 +174,7 @@ export default function AgendarPage() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
               {ESPECIALIDADES.map(e => (
                 <div key={e.id} onClick={() => setEsp(e.id)}
-                  style={{ background:'#fff', borderRadius:12, padding:'14px 12px',
+                  style={{  borderRadius:12, padding:'14px 12px',
                     border:`2px solid ${esp===e.id?'#3ECF8E':'#e2e8f0'}`,
                     background: esp===e.id?'#f0fdf4':'#fff',
                     cursor:'pointer', transition:'all .15s', textAlign:'center' }}>

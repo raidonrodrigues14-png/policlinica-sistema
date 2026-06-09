@@ -539,7 +539,7 @@ export default function ProntuarioPage() {
     const pacientesStorage = localStorage.getItem('pacientes_triagem')
     if (pacientesStorage) {
       const pacientes = JSON.parse(pacientesStorage)
-      const paraAtendimento = pacientes.filter(p => p.status === 'aguardando_medico')
+      const paraAtendimento = pacientes.filter((p: any) => p.status === 'aguardando_medico')
       setFilaMedica(paraAtendimento)
     } else {
       setFilaMedica([])

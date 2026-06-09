@@ -10,8 +10,15 @@ const RISCO = [
   {id:'azul',label:'Não urgente',tempo:'≤240min',bg:'#3b82f6',c:'#fff'}
 ]
 
-const av = (v,min,max,ok,at,al) => !v?'':(+v<min||+v>max)?al:(+v<=ok)?'normal':(+v<=at)?'atencao':'alerta'
-const cls = {normal:{b:'#dcfce7',c:'#166534',t:'Normal'},atencao:{b:'#fef9c3',c:'#854d0e',t:'Atenção'},alerta:{b:'#fee2e2',c:'#991b1b',t:'Alerta'},'':{b:'#f1f5f9',c:'#94a3b8',t:'—'}}
+const av = (v: any, min: any, max: any, ok: any, at: any, al: any) => 
+  !v ? '' : (+v < min || +v > max) ? al : (+v <= ok) ? 'normal' : (+v <= at) ? 'atencao' : 'alerta'
+
+const cls = {
+  normal: { b: '#dcfce7', c: '#166534', t: 'Normal' },
+  atencao: { b: '#fef9c3', c: '#854d0e', t: 'Atenção' },
+  alerta: { b: '#fef2e2', c: '#991b1b', t: 'Alerta' },
+  '': { b: '#f1f5f9', c: '#94a3b8', t: '-' }
+}
 
 export default function TriagemPage() {
   const router = useRouter()
