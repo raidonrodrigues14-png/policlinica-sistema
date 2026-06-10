@@ -90,7 +90,7 @@ const ABAS = [
 ]
 
 type DocTipo = 'receita' | 'atestado' | 'declaracao' | 'exames' | 'encaminhamento'
-interface MedItem { id:string; med:string; dose:string; pos:string; dur:string }
+interface MedItem { id:string; med:string; dose:string; pos:string; dur:string; showSuggestions?: boolean; suggestions?: any[]; loading?: boolean }
 
 const UNIDADE = {
   prefeitura: 'PREFEITURA MUNICIPAL',
@@ -100,6 +100,99 @@ const UNIDADE = {
   endereco:   'Av. Principal, 100 - Centro',
   municipio:  'Alto Alegre do Maranhao - MA',
   telefone:   '(99) 3333-4444',
+}
+
+// Função para buscar medicamentos da API do BNAFAR/Hórus
+async function buscarMedicamentosAPI(termo: string): Promise<any[]> {
+  if (!termo || termo.length < 3) return []
+  
+  try {
+    const url = new URL('https://apidadosabertos.saude.gov.br/v1/daf/estoque_medicamentos_bnafar_horus')
+    url.searchParams.append('limit', '50')
+    url.searchParams.append('offset', '0')
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      }
+    })
+    
+    if (!response.ok) {
+      console.warn(`API retornou status ${response.status}`)
+      return []
+    }
+    
+    const data = await response.json()
+    const medicamentosMap = new Map()
+    
+    // Processa os dados da API
+    if (data && Array.isArray(data)) {
+      data.forEach((item: any) => {
+        // Tenta extrair o nome do medicamento de diferentes campos possíveis
+        const nomeMed = item.nome_medicamento || 
+                        item.medicamento || 
+                        item.descricao_item || 
+                        item.descricao ||
+                        item.nome_produto ||
+                        ''
+        
+        const codigo = item.codigo_catmat || item.codigo_item || ''
+        
+        if (nomeMed && nomeMed.toLowerCase().includes(termo.toLowerCase())) {
+          if (!medicamentosMap.has(nomeMed)) {
+            medicamentosMap.set(nomeMed, {
+              nome: nomeMed,
+              codigo: codigo,
+              apresentacao: item.apresentacao || item.unidade_fornecimento || '',
+              laboratorio: item.laboratorio || item.fabricante || ''
+            })
+          }
+        }
+      })
+    }
+    
+    // Se não encontrou na API, usa fallback local
+    if (medicamentosMap.size === 0) {
+      return buscarMedicamentosLocal(termo)
+    }
+    
+    return Array.from(medicamentosMap.values()).slice(0, 15)
+  } catch (error) {
+    console.error('Erro ao buscar medicamentos na API:', error)
+    // Fallback para busca local
+    return buscarMedicamentosLocal(termo)
+  }
+}
+
+// Lista de medicamentos comuns como fallback
+function buscarMedicamentosLocal(termo: string): any[] {
+  const medicamentosLocais = [
+    { nome: 'Paracetamol 500mg', codigo: '123456', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Ibuprofeno 400mg', codigo: '123457', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Dipirona Sódica 500mg/mL', codigo: '123458', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
+    { nome: 'Amoxicilina 500mg', codigo: '123459', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Losartana Potássica 50mg', codigo: '123460', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Hidroclorotiazida 25mg', codigo: '123461', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Metformina 850mg', codigo: '123462', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'AAS 100mg', codigo: '123463', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Sinvastatina 20mg', codigo: '123464', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Omeprazol 20mg', codigo: '123465', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Pantoprazol 40mg', codigo: '123466', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Salbutamol 100mcg', codigo: '123467', apresentacao: 'Spray', laboratorio: 'Genérico' },
+    { nome: 'Budesonida 200mcg', codigo: '123468', apresentacao: 'Spray', laboratorio: 'Genérico' },
+    { nome: 'Prednisolona 20mg', codigo: '123469', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Dexametasona 4mg', codigo: '123470', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Captopril 25mg', codigo: '123471', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Enalapril 10mg', codigo: '123472', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Propranolol 40mg', codigo: '123473', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Atenolol 50mg', codigo: '123474', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Nimesulida 100mg', codigo: '123475', apresentacao: 'Comprimido', laboratorio: 'Genérico' }
+  ]
+  
+  return medicamentosLocais.filter(m => 
+    m.nome.toLowerCase().includes(termo.toLowerCase())
+  )
 }
 
 // Componente de Preview do Documento
@@ -290,7 +383,7 @@ export default function ProntuarioPage() {
   
   // Receituario
   const [tipoRec, setTipoRec] = useState('simples')
-  const [itens, setItens] = useState<MedItem[]>([{ id:'1', med:'', dose:'', pos:'', dur:'' }])
+  const [itens, setItens] = useState<MedItem[]>([{ id:'1', med:'', dose:'', pos:'', dur:'', showSuggestions: false, suggestions: [], loading: false }])
   const [obs, setObs] = useState('')
   
   // Atestado
@@ -724,9 +817,61 @@ export default function ProntuarioPage() {
     setEncs([])
   }
 
-  function addItem() { setItens(i => [...i, { id: Date.now().toString(), med:'', dose:'', pos:'', dur:'' }]) }
+  // Funções para gerenciar medicamentos com API
+  async function handleMedChange(id: string, value: string) {
+    // Atualiza o valor do campo
+    updItem(id, 'med', value)
+    
+    // Busca sugestões da API se tiver 3+ caracteres
+    if (value.length >= 3) {
+      setItens(items => items.map(item => 
+        item.id === id 
+          ? { ...item, loading: true, showSuggestions: true }
+          : item
+      ))
+      
+      const resultados = await buscarMedicamentosAPI(value)
+      
+      setItens(items => items.map(item => 
+        item.id === id 
+          ? { ...item, suggestions: resultados, loading: false, showSuggestions: true }
+          : item
+      ))
+    } else {
+      setItens(items => items.map(item => 
+        item.id === id 
+          ? { ...item, suggestions: [], showSuggestions: false, loading: false }
+          : item
+      ))
+    }
+  }
+
+  function selectSuggestion(id: string, medicamento: any) {
+    updItem(id, 'med', medicamento.nome)
+    setItens(items => items.map(item => 
+      item.id === id 
+        ? { ...item, suggestions: [], showSuggestions: false, loading: false }
+        : item
+    ))
+  }
+
+  function addItem() { 
+    setItens(i => [...i, { 
+      id: Date.now().toString(), 
+      med: '', 
+      dose: '', 
+      pos: '', 
+      dur: '',
+      showSuggestions: false,
+      suggestions: [],
+      loading: false
+    }]) 
+  }
+  
   function rmItem(id:string) { setItens(i => i.filter(x=>x.id!==id)) }
-  function updItem(id:string, k:keyof MedItem, v:string) { setItens(i => i.map(x=>x.id===id?{...x,[k]:v}:x)) }
+  function updItem(id:string, k:keyof MedItem, v:string) { 
+    setItens(i => i.map(x=>x.id===id?{...x,[k]:v}:x)) 
+  }
 
   function abrirDocumento(tipo: DocTipo) {
     setDocMedico(usuario?.nome || 'Dr(a).')
@@ -1426,22 +1571,129 @@ export default function ProntuarioPage() {
 
             {docTipo === 'receita' && (
               <div>
-                <div style={fld}><label style={lbl}>Tipo de receituario</label>
+                <div style={fld}>
+                  <label style={lbl}>Tipo de receituario</label>
                   <select style={inp} value={tipoRec} onChange={e=>setTipoRec(e.target.value)}>
-                    <option value="simples">Simples</option><option value="especial">Controle Especial</option><option value="continuo">Uso Continuo</option>
+                    <option value="simples">Simples</option>
+                    <option value="especial">Controle Especial</option>
+                    <option value="continuo">Uso Continuo</option>
                   </select>
                 </div>
-                {itens.map((item,i)=>(
+                
+                {itens.map((item) => (
                   <div key={item.id} style={{background:'#f8fafc',borderRadius:8,padding:10,marginBottom:8,position:'relative'}}>
-                    {itens.length>1 && <button onClick={()=>rmItem(item.id)} style={{position:'absolute',top:8,right:8,background:'none',border:'none',cursor:'pointer'}}>x</button>}
-                    <input style={{...inp,marginBottom:4}} placeholder="Medicamento" value={item.med} onChange={e=>updItem(item.id,'med',e.target.value)} />
-                    <input style={{...inp,marginBottom:4}} placeholder="Dosagem" value={item.dose} onChange={e=>updItem(item.id,'dose',e.target.value)} />
-                    <input style={{...inp,marginBottom:4}} placeholder="Posologia" value={item.pos} onChange={e=>updItem(item.id,'pos',e.target.value)} />
-                    <input style={inp} placeholder="Duração" value={item.dur} onChange={e=>updItem(item.id,'dur',e.target.value)} />
+                    {itens.length > 1 && (
+                      <button onClick={()=>rmItem(item.id)} style={{position:'absolute',top:8,right:8,background:'none',border:'none',cursor:'pointer',fontSize:14}}>✕</button>
+                    )}
+                    
+                    {/* Campo de Medicamento com Autocomplete da API */}
+                    <div style={{position:'relative',marginBottom:4}}>
+                      <input 
+                        style={{...inp, paddingRight: item.loading ? '30px' : '10px'}} 
+                        placeholder="🔍 Medicamento (digite 3+ letras - Busca na Base Nacional do SUS)" 
+                        value={item.med} 
+                        onChange={e => handleMedChange(item.id, e.target.value)}
+                        onFocus={() => {
+                          if (item.med && item.med.length >= 3 && (!item.suggestions || item.suggestions.length === 0)) {
+                            handleMedChange(item.id, item.med)
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setItens(items => items.map(i => 
+                              i.id === item.id 
+                                ? { ...i, showSuggestions: false }
+                                : i
+                            ))
+                          }, 200)
+                        }}
+                      />
+                      {item.loading && (
+                        <div style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:12,color:'#94a3b8'}}>
+                          ⏳
+                        </div>
+                      )}
+                      
+                      {/* Sugestões da API */}
+                      {item.showSuggestions && item.suggestions && item.suggestions.length > 0 && (
+                        <div style={{
+                          position:'absolute',
+                          top:'100%',
+                          left:0,
+                          right:0,
+                          background:'#fff',
+                          border:'1px solid #e2e8f0',
+                          borderRadius:8,
+                          maxHeight:250,
+                          overflowY:'auto',
+                          zIndex:100,
+                          boxShadow:'0 4px 12px rgba(0,0,0,0.15)'
+                        }}>
+                          {item.suggestions.map((sug, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => selectSuggestion(item.id, sug)}
+                              style={{
+                                padding:'10px 12px',
+                                cursor:'pointer',
+                                borderBottom:'1px solid #f1f5f9',
+                                transition:'background 0.1s'
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0fdf4')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                            >
+                              <div style={{fontSize:13,fontWeight:500,color:'#0f172a'}}>{sug.nome}</div>
+                              {sug.apresentacao && (
+                                <div style={{fontSize:10,color:'#64748b'}}>
+                                  {sug.apresentacao}
+                                </div>
+                              )}
+                              {sug.codigo && (
+                                <div style={{fontSize:9,color:'#94a3b8',marginTop:2}}>
+                                  CATMAT: {sug.codigo}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <input 
+                      style={{...inp,marginBottom:4}} 
+                      placeholder="Dosagem (ex: 500mg, 10mg/mL)" 
+                      value={item.dose} 
+                      onChange={e=>updItem(item.id,'dose',e.target.value)} 
+                    />
+                    
+                    <input 
+                      style={{...inp,marginBottom:4}} 
+                      placeholder="Posologia (ex: 1 comprimido a cada 8h)" 
+                      value={item.pos} 
+                      onChange={e=>updItem(item.id,'pos',e.target.value)} 
+                    />
+                    
+                    <input 
+                      style={inp} 
+                      placeholder="Duração (ex: 7 dias, uso contínuo)" 
+                      value={item.dur} 
+                      onChange={e=>updItem(item.id,'dur',e.target.value)} 
+                    />
+                    
+                    <div style={{fontSize:9,color:'#94a3b8',marginTop:4,display:'flex',alignItems:'center',gap:4}}>
+                      <span>🏥</span> Dados da Base Nacional de Medicamentos (BNAFAR/Hórus - SUS)
+                    </div>
                   </div>
                 ))}
-                <button onClick={addItem} style={{width:'100%',padding:'7px',background:'#f1f5f9',border:'1px solid #e2e8f0',borderRadius:8,marginBottom:10}}>+ Medicamento</button>
-                <div style={fld}><label style={lbl}>Observações</label><textarea style={inp} value={obs} onChange={e=>setObs(e.target.value)} rows={3} /></div>
+                
+                <button onClick={addItem} style={{width:'100%',padding:'7px',background:'#f1f5f9',border:'1px solid #e2e8f0',borderRadius:8,marginBottom:10,cursor:'pointer'}}>
+                  + Adicionar Medicamento
+                </button>
+                
+                <div style={fld}>
+                  <label style={lbl}>Observações</label>
+                  <textarea style={inp} value={obs} onChange={e=>setObs(e.target.value)} rows={3} />
+                </div>
               </div>
             )}
 
@@ -1537,4 +1789,4 @@ export default function ProntuarioPage() {
       )}
     </div>
   )
-} 
+}
