@@ -25,15 +25,204 @@ const PROX_STATUS: Record<string,string> = {
   em_atendimento:     'finalizado',
 }
 
+// ============================================
+// FUNÇÃO PARA BUSCAR PACIENTE NO CADSUS
+// ============================================
+async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promise<any | null> {
+  if (!termo || termo.length < (tipo === 'cpf' ? 11 : 3)) return null
+  
+  if (tipo === 'cpf') {
+    const cpfNumerico = termo.replace(/\D/g, '')
+    if (cpfNumerico.length !== 11) return null
+    
+    try {
+      // Opção 1: API oficial do CadSUS via RNDS
+      const response = await fetch(
+        `https://rnds.saude.gov.br/fhir/Patient?identifier=CPF|${cpfNumerico}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/fhir+json',
+          }
+        }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.entry && data.entry.length > 0) {
+          const patient = data.entry[0].resource
+          return {
+            nome: patient.name?.[0]?.text || patient.name?.[0]?.given?.join(' ') + ' ' + (patient.name?.[0]?.family || ''),
+            cpf: cpfNumerico,
+            dataNascimento: patient.birthDate,
+            sexo: patient.gender === 'male' ? 'M' : patient.gender === 'female' ? 'F' : 'I',
+            municipio: patient.address?.[0]?.city || '',
+            cns: patient.identifier?.find((id: any) => id.system?.includes('CNS'))?.value || '',
+            telefone: patient.telecom?.find((t: any) => t.system === 'phone')?.value || '',
+            endereco: patient.address?.[0]?.line?.[0] || '',
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar no CadSUS via RNDS:', error)
+    }
+  } else {
+    // Busca por NOME
+    try {
+      const nomeEncoded = encodeURIComponent(termo)
+      
+      // Opção 1: Busca por nome no RNDS
+      const response = await fetch(
+        `https://rnds.saude.gov.br/fhir/Patient?name=${nomeEncoded}&_count=10`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/fhir+json',
+          }
+        }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.entry && data.entry.length > 0) {
+          // Retorna lista de pacientes encontrados
+          const pacientes = data.entry.map((entry: any) => {
+            const patient = entry.resource
+            return {
+              nome: patient.name?.[0]?.text || patient.name?.[0]?.given?.join(' ') + ' ' + (patient.name?.[0]?.family || ''),
+              cpf: patient.identifier?.find((id: any) => id.system?.includes('CPF'))?.value || '',
+              dataNascimento: patient.birthDate,
+              sexo: patient.gender === 'male' ? 'M' : patient.gender === 'female' ? 'F' : 'I',
+              municipio: patient.address?.[0]?.city || '',
+              cns: patient.identifier?.find((id: any) => id.system?.includes('CNS'))?.value || '',
+              telefone: patient.telecom?.find((t: any) => t.system === 'phone')?.value || '',
+              endereco: patient.address?.[0]?.line?.[0] || '',
+            }
+          })
+          return pacientes
+        }
+      }
+    } catch (error) {
+      console.error('Erro na busca por nome no RNDS:', error)
+    }
+    
+    // Opção 2: API DataSUS por nome
+    try {
+      const nomeEncoded = encodeURIComponent(termo)
+      const response = await fetch(
+        `https://apisus.saude.gov.br/cadsus/api/paciente/nome/${nomeEncoded}`,
+        {
+          headers: {
+            'Accept': 'application/json',
+          }
+        }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data && data.length > 0) {
+          return data.map((p: any) => ({
+            nome: p.nome || p.nomeCompleto || '',
+            cpf: p.cpf || '',
+            dataNascimento: p.dataNascimento || p.nascimento,
+            sexo: p.sexo === 'MASCULINO' ? 'M' : p.sexo === 'FEMININO' ? 'F' : 'I',
+            municipio: p.municipio || p.cidade || '',
+            cns: p.cns || p.numeroCNS || '',
+            telefone: p.telefone || p.telefoneCelular || '',
+            endereco: p.endereco || p.logradouro || '',
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('Erro na busca por nome no DataSUS:', error)
+    }
+  }
+  
+  // Mock para desenvolvimento/teste (remover em produção)
+  if (process.env.NODE_ENV === 'development') {
+    const mockCadSUS: Record<string, any> = {
+      '12345678901': {
+        nome: 'João Silva Santos',
+        dataNascimento: '1985-03-15',
+        sexo: 'M',
+        municipio: 'São Paulo',
+        cns: '123456789012345',
+        telefone: '(11) 98765-4321',
+        endereco: 'Rua das Flores, 123'
+      },
+      '98765432109': {
+        nome: 'Maria Oliveira Souza',
+        dataNascimento: '1990-07-22',
+        sexo: 'F',
+        municipio: 'Rio de Janeiro',
+        cns: '987654321098765',
+        telefone: '(21) 91234-5678',
+        endereco: 'Av. Atlântica, 500'
+      },
+      '11122233344': {
+        nome: 'Pedro Costa Lima',
+        dataNascimento: '1978-11-30',
+        sexo: 'M',
+        municipio: 'Belo Horizonte',
+        cns: '111222333444555',
+        telefone: '(31) 99876-5432',
+        endereco: 'Rua da Bahia, 789'
+      },
+      'Ana Rodrigues': {
+        nome: 'Ana Rodrigues Silva',
+        dataNascimento: '1992-05-18',
+        sexo: 'F',
+        municipio: 'Curitiba',
+        cns: '555444333222111',
+        telefone: '(41) 98765-4321',
+        endereco: 'Rua XV de Novembro, 200'
+      },
+      'Carlos Alberto': {
+        nome: 'Carlos Alberto Mendes',
+        dataNascimento: '1980-12-10',
+        sexo: 'M',
+        municipio: 'Porto Alegre',
+        cns: '999888777666555',
+        telefone: '(51) 99876-5432',
+        endereco: 'Av. Protásio Alves, 1000'
+      }
+    }
+    
+    if (tipo === 'cpf') {
+      const mockData = mockCadSUS[termo]
+      if (mockData) {
+        return { ...mockData, cpf: termo }
+      }
+    } else {
+      // Busca por nome (case insensitive)
+      const termoLower = termo.toLowerCase()
+      const resultados = Object.entries(mockCadSUS)
+        .filter(([key, value]) => 
+          key.toLowerCase().includes(termoLower) || 
+          value.nome.toLowerCase().includes(termoLower)
+        )
+        .map(([key, value]) => ({ ...value, cpf: key.length === 11 ? key : '' }))
+      
+      return resultados.length > 0 ? resultados : null
+    }
+  }
+  
+  return null
+}
+
 export default function RecepcaoPage() {
   const router = useRouter()
   const [usuario, setUsuario] = useState<any>(null)
   const [aba, setAba]         = useState<'fila'|'cadastro'|'painel'>('fila')
   const [fila, setFila]       = useState(FILA_DEMO)
-  const [form, setForm]       = useState({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'' })
+  const [form, setForm]       = useState({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'', cns:'', telefone:'', endereco:'' })
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg]           = useState('')
   const [sidebarAberta, setSidebar] = useState(true)
+  const [buscandoCadSUS, setBuscandoCadSUS] = useState(false)
+  const [cpfEncontrado, setCpfEncontrado] = useState(false)
+  const [resultadosBusca, setResultadosBusca] = useState<any[]>([])
+  const [mostrarResultados, setMostrarResultados] = useState(false)
 
   // Painel TV
   const [chamadaAtual, setChamadaAtual]   = useState<any>(null)
@@ -47,7 +236,6 @@ export default function RecepcaoPage() {
     if (!u) { router.replace('/login'); return }
     setUsuario(JSON.parse(u))
     
-    // Inicializar localStorage da triagem se vazio
     if (!localStorage.getItem('pacientes_triagem')) {
       localStorage.setItem('pacientes_triagem', JSON.stringify([]))
     }
@@ -70,6 +258,130 @@ export default function RecepcaoPage() {
 
   if (!usuario) return null
 
+  // Função para buscar no CadSUS por CPF
+  const buscarPorCPF = async (cpf: string) => {
+    const cpfLimpo = cpf.replace(/\D/g, '')
+    if (cpfLimpo.length !== 11) return null
+    
+    setBuscandoCadSUS(true)
+    setMsg('🔍 Buscando paciente no CadSUS por CPF...')
+    
+    try {
+      const paciente = await buscarPacienteCadSUS(cpfLimpo, 'cpf')
+      if (paciente) {
+        setForm(f => ({
+          ...f,
+          nome: paciente.nome,
+          nascimento: paciente.dataNascimento,
+          sexo: paciente.sexo,
+          municipio: paciente.municipio,
+          cns: paciente.cns || '',
+          telefone: paciente.telefone || '',
+          endereco: paciente.endereco || '',
+          cpf: cpfLimpo
+        }))
+        setCpfEncontrado(true)
+        setMostrarResultados(false)
+        setMsg(`✅ Paciente encontrado no CadSUS: ${paciente.nome}`)
+        setTimeout(() => setMsg(''), 3000)
+        return paciente
+      } else {
+        setMsg('⚠️ CPF não encontrado no CadSUS. Preencha os dados manualmente.')
+        setTimeout(() => setMsg(''), 3000)
+        return null
+      }
+    } catch (error) {
+      console.error('Erro na busca do CadSUS:', error)
+      setMsg('❌ Erro ao consultar CadSUS. Preencha os dados manualmente.')
+      setTimeout(() => setMsg(''), 3000)
+      return null
+    } finally {
+      setBuscandoCadSUS(false)
+    }
+  }
+
+  // Função para buscar no CadSUS por NOME
+  const buscarPorNome = async (nome: string) => {
+    if (nome.length < 3) return
+    
+    setBuscandoCadSUS(true)
+    setMsg('🔍 Buscando pacientes no CadSUS...')
+    
+    try {
+      const resultados = await buscarPacienteCadSUS(nome, 'nome')
+      
+      if (resultados && resultados.length > 0) {
+        setResultadosBusca(resultados)
+        setMostrarResultados(true)
+        setMsg(`🔍 Encontrados ${resultados.length} paciente(s) no CadSUS. Selecione um abaixo.`)
+        setTimeout(() => setMsg(''), 3000)
+      } else {
+        setResultadosBusca([])
+        setMostrarResultados(false)
+        setMsg('⚠️ Nenhum paciente encontrado no CadSUS. Preencha os dados manualmente.')
+        setTimeout(() => setMsg(''), 3000)
+      }
+    } catch (error) {
+      console.error('Erro na busca por nome:', error)
+      setResultadosBusca([])
+      setMostrarResultados(false)
+      setMsg('❌ Erro ao consultar CadSUS. Preencha os dados manualmente.')
+      setTimeout(() => setMsg(''), 3000)
+    } finally {
+      setBuscandoCadSUS(false)
+    }
+  }
+
+  // Handler para mudança no CPF
+  const handleCpfChange = async (cpf: string) => {
+    setForm(f => ({ ...f, cpf }))
+    setCpfEncontrado(false)
+    
+    if ((window as any).cpfTimeout) clearTimeout((window as any).cpfTimeout)
+    
+    (window as any).cpfTimeout = setTimeout(async () => {
+      const cpfLimpo = cpf.replace(/\D/g, '')
+      if (cpfLimpo.length === 11) {
+        await buscarPorCPF(cpf)
+      }
+    }, 500)
+  }
+
+  // Handler para mudança no NOME
+  const handleNomeChange = async (nome: string) => {
+    setForm(f => ({ ...f, nome }))
+    setCpfEncontrado(false)
+    setMostrarResultados(false)
+    
+    if ((window as any).nomeTimeout) clearTimeout((window as any).nomeTimeout)
+    
+    (window as any).nomeTimeout = setTimeout(async () => {
+      if (nome.length >= 3) {
+        await buscarPorNome(nome)
+      }
+    }, 500)
+  }
+
+  // Selecionar paciente da lista de resultados
+  const selecionarPacienteResultado = (paciente: any) => {
+    setForm({
+      nome: paciente.nome,
+      cpf: paciente.cpf || '',
+      nascimento: paciente.dataNascimento || '',
+      sexo: paciente.sexo || 'M',
+      municipio: paciente.municipio || '',
+      especialidade: form.especialidade,
+      cns: paciente.cns || '',
+      telefone: paciente.telefone || '',
+      endereco: paciente.endereco || '',
+    })
+    setCpfEncontrado(true)
+    setMostrarResultados(false)
+    setResultadosBusca([])
+    setMsg(`✅ Paciente "${paciente.nome}" selecionado do CadSUS!`)
+    setTimeout(() => setMsg(''), 3000)
+  }
+
   const aguardando  = fila.filter(f => ['aguardando_triagem','aguardando_medico'].includes(f.status)).length
   const atendimento = fila.filter(f => f.status === 'em_atendimento').length
   const triagem     = fila.filter(f => f.status === 'em_triagem').length
@@ -83,13 +395,11 @@ export default function RecepcaoPage() {
       item.id === id ? { ...item, status: novoStatus || item.status } : item
     ))
 
-    // Se o paciente foi encaminhado para triagem, salvar no localStorage
     if (paciente && novoStatus === 'em_triagem') {
       enviarParaTriagemStorage(paciente)
     }
   }
 
-  // Função separada para enviar paciente para o localStorage da triagem
   const enviarParaTriagemStorage = (paciente: any) => {
     const pacienteParaTriagem = {
       id: paciente.id,
@@ -105,10 +415,8 @@ export default function RecepcaoPage() {
       dados_triagem: null
     }
     
-    // Recuperar pacientes existentes na triagem
     const triagemPacientes = JSON.parse(localStorage.getItem('pacientes_triagem') || '[]')
     
-    // Verificar se já não está na lista
     const existe = triagemPacientes.some((p: any) => p.id === paciente.id)
     if (!existe) {
       triagemPacientes.push(pacienteParaTriagem)
@@ -120,15 +428,12 @@ export default function RecepcaoPage() {
   }
 
   function enviarParaTriagem(paciente: any) {
-    // Mudar status para em_triagem na fila local
     setFila(f => f.map(item =>
       item.id === paciente.id ? { ...item, status: 'em_triagem' } : item
     ))
 
-    // Salvar no localStorage para a tela de triagem
     enviarParaTriagemStorage(paciente)
     
-    // Opcional: perguntar se quer abrir a tela de triagem
     setTimeout(() => {
       if (confirm(`Paciente ${paciente.nome} foi encaminhado para triagem. Deseja abrir a tela de triagem agora?`)) {
         router.push('/triagem')
@@ -152,7 +457,15 @@ export default function RecepcaoPage() {
   }
 
   async function salvarPaciente(e: React.FormEvent) {
-    e.preventDefault(); setSalvando(true)
+    e.preventDefault()
+    
+    if (!form.nome) {
+      setMsg('❌ Nome do paciente é obrigatório!')
+      setTimeout(() => setMsg(''), 3000)
+      return
+    }
+    
+    setSalvando(true)
     await new Promise(r => setTimeout(r, 800))
     
     const novoId = String(Date.now())
@@ -167,9 +480,36 @@ export default function RecepcaoPage() {
       cons: 'Aguardando sala'
     }
     
+    // Salvar paciente completo no localStorage
+    const pacientesStorage = localStorage.getItem('pacientes')
+    const pacientes = pacientesStorage ? JSON.parse(pacientesStorage) : []
+    const existe = pacientes.find((p: any) => p.cpf === form.cpf)
+    
+    if (!existe && form.cpf) {
+      pacientes.push({
+        id: novoId,
+        num: novoNum,
+        nome: form.nome,
+        cpf: form.cpf,
+        dataNascimento: form.nascimento,
+        sexo: form.sexo,
+        municipio: form.municipio,
+        cns: form.cns,
+        telefone: form.telefone,
+        endereco: form.endereco,
+        criado_em: new Date().toISOString(),
+        fonte: cpfEncontrado ? 'cadsus' : 'manual'
+      })
+      localStorage.setItem('pacientes', JSON.stringify(pacientes))
+    }
+    
     setFila(f => [...f, novoPaciente])
-    setMsg(`✅ Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida.`)
-    setForm({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'' })
+    setMsg(`✅ Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida. ${cpfEncontrado ? 'Dados importados do CadSUS.' : ''}`)
+    
+    setForm({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'', cns:'', telefone:'', endereco:'' })
+    setCpfEncontrado(false)
+    setMostrarResultados(false)
+    setResultadosBusca([])
     setSalvando(false)
     setTimeout(() => { setMsg(''); setAba('fila') }, 3000)
   }
@@ -243,16 +583,13 @@ export default function RecepcaoPage() {
 
           {msg && (
             <div style={{ 
-              background:'#dcfce7', 
-              border:'1px solid #86efac', 
-              borderRadius:8, 
-              padding:'10px 14px', 
-              fontSize:13, 
-              color:'#166534', 
-              fontWeight:600, 
-              marginBottom:14 
+              background: msg.includes('✅') ? '#dcfce7' : msg.includes('🔍') ? '#e0f2fe' : msg.includes('⚠️') ? '#fef9c3' : '#fee2e2',
+              border: `1px solid ${msg.includes('✅') ? '#86efac' : msg.includes('🔍') ? '#bae6fd' : msg.includes('⚠️') ? '#fde047' : '#fecaca'}`,
+              borderRadius:8, padding:'10px 14px', fontSize:13, 
+              color: msg.includes('✅') ? '#166534' : msg.includes('🔍') ? '#0369a1' : msg.includes('⚠️') ? '#854d0e' : '#991b1b', 
+              fontWeight:600, marginBottom:14 
             }}>
-              ✓ {msg}
+              {msg}
             </div>
           )}
 
@@ -290,7 +627,7 @@ export default function RecepcaoPage() {
 
             <div style={{ padding:20 }}>
 
-              {/* ABA FILA */}
+              {/* ABA FILA - mantida igual */}
               {aba === 'fila' && (
                 <div>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
@@ -357,7 +694,7 @@ export default function RecepcaoPage() {
                 </div>
               )}
 
-              {/* ABA PAINEL */}
+              {/* ABA PAINEL - mantida igual */}
               {aba === 'painel' && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:16 }}>
 
@@ -455,18 +792,118 @@ export default function RecepcaoPage() {
                 </div>
               )}
 
-              {/* ABA CADASTRO */}
+              {/* ABA CADASTRO - COM BUSCA POR NOME E CPF */}
               {aba === 'cadastro' && (
                 <div>
                   <form onSubmit={salvarPaciente}>
+                    {/* Destaque para busca no CadSUS */}
+                    <div style={{ 
+                      background: '#e8f4fd', 
+                      borderRadius: 10, 
+                      padding: '12px 16px', 
+                      marginBottom: 16,
+                      border: '1px solid #b3d9f5'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 20 }}>🔍</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#075985', marginBottom: 2 }}>
+                            Busca automática no CadSUS
+                          </div>
+                          <div style={{ fontSize: 10, color: '#0369a1' }}>
+                            Digite o NOME ou CPF e os dados serão preenchidos automaticamente
+                          </div>
+                        </div>
+                        {buscandoCadSUS && (
+                          <div style={{ fontSize: 12, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span>⏳</span> Buscando...
+                          </div>
+                        )}
+                        {cpfEncontrado && (
+                          <div style={{ fontSize: 12, color: '#059669', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span>✅</span> CadSUS
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lista de resultados da busca por nome */}
+                    {mostrarResultados && resultadosBusca.length > 0 && (
+                      <div style={{ 
+                        marginBottom: 16, 
+                        border: '1px solid #e2e8f0', 
+                        borderRadius: 10, 
+                        overflow: 'hidden',
+                        background: '#fff'
+                      }}>
+                        <div style={{ 
+                          background: '#f1f5f9', 
+                          padding: '8px 12px', 
+                          fontSize: 12, 
+                          fontWeight: 700, 
+                          color: '#0f172a',
+                          borderBottom: '1px solid #e2e8f0'
+                        }}>
+                          📋 Selecione um paciente encontrado no CadSUS:
+                        </div>
+                        {resultadosBusca.map((paciente, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => selecionarPacienteResultado(paciente)}
+                            style={{
+                              padding: '12px 16px',
+                              cursor: 'pointer',
+                              borderBottom: idx < resultadosBusca.length - 1 ? '1px solid #f1f5f9' : 'none',
+                              transition: 'background 0.1s',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0fdf4')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#0f172a' }}>{paciente.nome}</div>
+                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                                {paciente.cpf && `CPF: ${paciente.cpf} · `}
+                                {paciente.municipio && `${paciente.municipio}`}
+                              </div>
+                            </div>
+                            <button style={{
+                              padding: '4px 12px',
+                              background: '#3ECF8E',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              cursor: 'pointer'
+                            }}>
+                              Selecionar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                       <div style={{ gridColumn:'span 2' }}>
                         <label style={lbl}>Nome completo *</label>
-                        <input style={inp} value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} required placeholder="Nome do paciente" />
+                        <input 
+                          style={inp} 
+                          value={form.nome} 
+                          onChange={e => handleNomeChange(e.target.value)} 
+                          required 
+                          placeholder="Digite o nome para buscar no CadSUS"
+                        />
                       </div>
                       <div>
                         <label style={lbl}>CPF</label>
-                        <input style={inp} value={form.cpf} onChange={e=>setForm(f=>({...f,cpf:e.target.value}))} placeholder="000.000.000-00" />
+                        <input 
+                          style={{...inp, borderColor: cpfEncontrado ? '#10b981' : '#e2e8f0'}} 
+                          value={form.cpf} 
+                          onChange={e => handleCpfChange(e.target.value)} 
+                          placeholder="000.000.000-00"
+                        />
                       </div>
                       <div>
                         <label style={lbl}>Data de nascimento *</label>
@@ -481,8 +918,20 @@ export default function RecepcaoPage() {
                         </select>
                       </div>
                       <div>
-                        <label style={lbl}>Municipio *</label>
+                        <label style={lbl}>Município *</label>
                         <input style={inp} value={form.municipio} onChange={e=>setForm(f=>({...f,municipio:e.target.value}))} required placeholder="Cidade" />
+                      </div>
+                      <div>
+                        <label style={lbl}>CNS (CadSUS)</label>
+                        <input style={inp} value={form.cns} onChange={e=>setForm(f=>({...f,cns:e.target.value}))} placeholder="Número do Cartão SUS" />
+                      </div>
+                      <div>
+                        <label style={lbl}>Telefone</label>
+                        <input style={inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))} placeholder="(00) 00000-0000" />
+                      </div>
+                      <div>
+                        <label style={lbl}>Endereço</label>
+                        <input style={inp} value={form.endereco} onChange={e=>setForm(f=>({...f,endereco:e.target.value}))} placeholder="Rua, número, bairro" />
                       </div>
                       <div style={{ gridColumn:'span 2' }}>
                         <label style={lbl}>Especialidade</label>
