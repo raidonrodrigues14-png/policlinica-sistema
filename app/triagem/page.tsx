@@ -18,7 +18,7 @@ const cls = {
   atencao: { b: '#fef9c3', c: '#854d0e', t: 'Atenção' },
   alerta: { b: '#fef2e2', c: '#991b1b', t: 'Alerta' },
   '': { b: '#f1f5f9', c: '#94a3b8', t: '-' }
-}
+} 
 
 export default function TriagemPage() {
   const router = useRouter()
