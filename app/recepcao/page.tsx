@@ -25,144 +25,15 @@ const PROX_STATUS: Record<string,string> = {
   em_atendimento:     'finalizado',
 }
 
-// ============================================
-// FUNÇÃO PARA BUSCAR PACIENTE NO CADSUS
-// ============================================
-async function buscarPacienteCadSUS(cpf: string): Promise<any | null> {
-  if (!cpf || cpf.length < 11) return null
-  
-  // Remove caracteres não numéricos
-  const cpfNumerico = cpf.replace(/\D/g, '')
-  
-  if (cpfNumerico.length !== 11) return null
-  
-  try {
-    // Opção 1: API oficial do CadSUS via RNDS
-    // Endpoint: https://rnds.saude.gov.br/fhir/Patient?identifier=CPF|{cpf}
-    const response = await fetch(
-      `https://rnds.saude.gov.br/fhir/Patient?identifier=CPF|${cpfNumerico}`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/fhir+json',
-          // Se tiver token, adicione:
-          // 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_RNDS_TOKEN}`
-        }
-      }
-    )
-    
-    if (response.ok) {
-      const data = await response.json()
-      
-      // Parse da resposta FHIR
-      if (data.entry && data.entry.length > 0) {
-        const patient = data.entry[0].resource
-        return {
-          nome: patient.name?.[0]?.text || patient.name?.[0]?.given?.join(' ') + ' ' + (patient.name?.[0]?.family || ''),
-          cpf: cpfNumerico,
-          dataNascimento: patient.birthDate,
-          sexo: patient.gender === 'male' ? 'M' : patient.gender === 'female' ? 'F' : 'I',
-          municipio: patient.address?.[0]?.city || '',
-          cns: patient.identifier?.find((id: any) => id.system?.includes('CNS'))?.value || '',
-          telefone: patient.telecom?.find((t: any) => t.system === 'phone')?.value || '',
-          endereco: patient.address?.[0]?.line?.[0] || '',
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Erro ao buscar no CadSUS via RNDS:', error)
-  }
-  
-  // Opção 2: API do DataSUS (CADSUS)
-  try {
-    const datasusUrl = `https://apisus.saude.gov.br/cadsus/api/paciente/cpf/${cpfNumerico}`
-    const response = await fetch(datasusUrl, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      return {
-        nome: data.nome || data.nomeCompleto || '',
-        cpf: cpfNumerico,
-        dataNascimento: data.dataNascimento || data.nascimento,
-        sexo: data.sexo === 'MASCULINO' ? 'M' : data.sexo === 'FEMININO' ? 'F' : 'I',
-        municipio: data.municipio || data.cidade || '',
-        cns: data.cns || data.numeroCNS || '',
-        telefone: data.telefone || data.telefoneCelular || '',
-        endereco: data.endereco || data.logradouro || '',
-      }
-    }
-  } catch (error) {
-    console.error('Erro ao buscar no DataSUS:', error)
-  }
-  
-  // Opção 3: Mock para desenvolvimento/teste (remover em produção)
-  // Simula uma busca no CadSUS com dados fictícios
-  if (process.env.NODE_ENV === 'development') {
-    // Mock de pacientes no CadSUS
-    const mockCadSUS: Record<string, any> = {
-      '12345678901': {
-        nome: 'João Silva Santos',
-        dataNascimento: '1985-03-15',
-        sexo: 'M',
-        municipio: 'São Paulo',
-        cns: '123456789012345',
-        telefone: '(11) 98765-4321',
-        endereco: 'Rua das Flores, 123'
-      },
-      '98765432109': {
-        nome: 'Maria Oliveira Souza',
-        dataNascimento: '1990-07-22',
-        sexo: 'F',
-        municipio: 'Rio de Janeiro',
-        cns: '987654321098765',
-        telefone: '(21) 91234-5678',
-        endereco: 'Av. Atlântica, 500'
-      },
-      '11122233344': {
-        nome: 'Pedro Costa Lima',
-        dataNascimento: '1978-11-30',
-        sexo: 'M',
-        municipio: 'Belo Horizonte',
-        cns: '111222333444555',
-        telefone: '(31) 99876-5432',
-        endereco: 'Rua da Bahia, 789'
-      }
-    }
-    
-    const mockData = mockCadSUS[cpfNumerico]
-    if (mockData) {
-      return {
-        nome: mockData.nome,
-        cpf: cpfNumerico,
-        dataNascimento: mockData.dataNascimento,
-        sexo: mockData.sexo,
-        municipio: mockData.municipio,
-        cns: mockData.cns,
-        telefone: mockData.telefone,
-        endereco: mockData.endereco,
-      }
-    }
-  }
-  
-  return null
-}
-
 export default function RecepcaoPage() {
   const router = useRouter()
   const [usuario, setUsuario] = useState<any>(null)
   const [aba, setAba]         = useState<'fila'|'cadastro'|'painel'>('fila')
   const [fila, setFila]       = useState(FILA_DEMO)
-  const [form, setForm]       = useState({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'', cns:'', telefone:'', endereco:'' })
+  const [form, setForm]       = useState({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'' })
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg]           = useState('')
   const [sidebarAberta, setSidebar] = useState(true)
-  const [buscandoCadSUS, setBuscandoCadSUS] = useState(false)
-  const [cpfEncontrado, setCpfEncontrado] = useState(false)
 
   // Painel TV
   const [chamadaAtual, setChamadaAtual]   = useState<any>(null)
@@ -176,6 +47,7 @@ export default function RecepcaoPage() {
     if (!u) { router.replace('/login'); return }
     setUsuario(JSON.parse(u))
     
+    // Inicializar localStorage da triagem se vazio
     if (!localStorage.getItem('pacientes_triagem')) {
       localStorage.setItem('pacientes_triagem', JSON.stringify([]))
     }
@@ -198,55 +70,6 @@ export default function RecepcaoPage() {
 
   if (!usuario) return null
 
-  // Função para buscar no CadSUS quando o CPF é digitado
-  const handleCpfChange = async (cpf: string) => {
-    setForm(f => ({ ...f, cpf }))
-    setCpfEncontrado(false)
-    
-    // Limpa o timeout anterior
-    if (window as any).cpfTimeout) clearTimeout((window as any).cpfTimeout)
-    
-    // Aguarda o usuário parar de digitar (500ms)
-    (window as any).cpfTimeout = setTimeout(async () => {
-      const cpfLimpo = cpf.replace(/\D/g, '')
-      if (cpfLimpo.length === 11) {
-        setBuscandoCadSUS(true)
-        setMsg('🔍 Buscando paciente no CadSUS...')
-        
-        try {
-          const pacienteCadSUS = await buscarPacienteCadSUS(cpf)
-          
-          if (pacienteCadSUS) {
-            // Preenche o formulário com os dados do CadSUS
-            setForm(f => ({
-              ...f,
-              nome: pacienteCadSUS.nome,
-              nascimento: pacienteCadSUS.dataNascimento,
-              sexo: pacienteCadSUS.sexo,
-              municipio: pacienteCadSUS.municipio,
-              cns: pacienteCadSUS.cns || '',
-              telefone: pacienteCadSUS.telefone || '',
-              endereco: pacienteCadSUS.endereco || '',
-              cpf: cpfLimpo
-            }))
-            setCpfEncontrado(true)
-            setMsg(`✅ Paciente encontrado no CadSUS: ${pacienteCadSUS.nome}`)
-            setTimeout(() => setMsg(''), 3000)
-          } else {
-            setMsg('⚠️ CPF não encontrado no CadSUS. Preencha os dados manualmente.')
-            setTimeout(() => setMsg(''), 3000)
-          }
-        } catch (error) {
-          console.error('Erro na busca do CadSUS:', error)
-          setMsg('❌ Erro ao consultar CadSUS. Preencha os dados manualmente.')
-          setTimeout(() => setMsg(''), 3000)
-        } finally {
-          setBuscandoCadSUS(false)
-        }
-      }
-    }, 500)
-  }
-
   const aguardando  = fila.filter(f => ['aguardando_triagem','aguardando_medico'].includes(f.status)).length
   const atendimento = fila.filter(f => f.status === 'em_atendimento').length
   const triagem     = fila.filter(f => f.status === 'em_triagem').length
@@ -260,11 +83,13 @@ export default function RecepcaoPage() {
       item.id === id ? { ...item, status: novoStatus || item.status } : item
     ))
 
+    // Se o paciente foi encaminhado para triagem, salvar no localStorage
     if (paciente && novoStatus === 'em_triagem') {
       enviarParaTriagemStorage(paciente)
     }
   }
 
+  // Função separada para enviar paciente para o localStorage da triagem
   const enviarParaTriagemStorage = (paciente: any) => {
     const pacienteParaTriagem = {
       id: paciente.id,
@@ -280,8 +105,10 @@ export default function RecepcaoPage() {
       dados_triagem: null
     }
     
+    // Recuperar pacientes existentes na triagem
     const triagemPacientes = JSON.parse(localStorage.getItem('pacientes_triagem') || '[]')
     
+    // Verificar se já não está na lista
     const existe = triagemPacientes.some((p: any) => p.id === paciente.id)
     if (!existe) {
       triagemPacientes.push(pacienteParaTriagem)
@@ -293,12 +120,15 @@ export default function RecepcaoPage() {
   }
 
   function enviarParaTriagem(paciente: any) {
+    // Mudar status para em_triagem na fila local
     setFila(f => f.map(item =>
       item.id === paciente.id ? { ...item, status: 'em_triagem' } : item
     ))
 
+    // Salvar no localStorage para a tela de triagem
     enviarParaTriagemStorage(paciente)
     
+    // Opcional: perguntar se quer abrir a tela de triagem
     setTimeout(() => {
       if (confirm(`Paciente ${paciente.nome} foi encaminhado para triagem. Deseja abrir a tela de triagem agora?`)) {
         router.push('/triagem')
@@ -322,15 +152,7 @@ export default function RecepcaoPage() {
   }
 
   async function salvarPaciente(e: React.FormEvent) {
-    e.preventDefault()
-    
-    if (!form.nome) {
-      setMsg('❌ Nome do paciente é obrigatório!')
-      setTimeout(() => setMsg(''), 3000)
-      return
-    }
-    
-    setSalvando(true)
+    e.preventDefault(); setSalvando(true)
     await new Promise(r => setTimeout(r, 800))
     
     const novoId = String(Date.now())
@@ -345,34 +167,9 @@ export default function RecepcaoPage() {
       cons: 'Aguardando sala'
     }
     
-    // Salvar paciente completo no localStorage
-    const pacientesStorage = localStorage.getItem('pacientes')
-    const pacientes = pacientesStorage ? JSON.parse(pacientesStorage) : []
-    const existe = pacientes.find((p: any) => p.cpf === form.cpf)
-    
-    if (!existe && form.cpf) {
-      pacientes.push({
-        id: novoId,
-        num: novoNum,
-        nome: form.nome,
-        cpf: form.cpf,
-        dataNascimento: form.nascimento,
-        sexo: form.sexo,
-        municipio: form.municipio,
-        cns: form.cns,
-        telefone: form.telefone,
-        endereco: form.endereco,
-        criado_em: new Date().toISOString(),
-        fonte: cpfEncontrado ? 'cadsus' : 'manual'
-      })
-      localStorage.setItem('pacientes', JSON.stringify(pacientes))
-    }
-    
     setFila(f => [...f, novoPaciente])
-    setMsg(`✅ Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida. ${cpfEncontrado ? 'Dados importados do CadSUS.' : ''}`)
-    
-    setForm({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'', cns:'', telefone:'', endereco:'' })
-    setCpfEncontrado(false)
+    setMsg(`✅ Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida.`)
+    setForm({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'' })
     setSalvando(false)
     setTimeout(() => { setMsg(''); setAba('fila') }, 3000)
   }
@@ -446,13 +243,16 @@ export default function RecepcaoPage() {
 
           {msg && (
             <div style={{ 
-              background: msg.includes('✅') ? '#dcfce7' : msg.includes('⚠️') ? '#fef9c3' : '#fee2e2',
-              border: `1px solid ${msg.includes('✅') ? '#86efac' : msg.includes('⚠️') ? '#fde047' : '#fecaca'}`,
-              borderRadius:8, padding:'10px 14px', fontSize:13, 
-              color: msg.includes('✅') ? '#166534' : msg.includes('⚠️') ? '#854d0e' : '#991b1b', 
-              fontWeight:600, marginBottom:14 
+              background:'#dcfce7', 
+              border:'1px solid #86efac', 
+              borderRadius:8, 
+              padding:'10px 14px', 
+              fontSize:13, 
+              color:'#166534', 
+              fontWeight:600, 
+              marginBottom:14 
             }}>
-              {msg}
+              ✓ {msg}
             </div>
           )}
 
@@ -557,7 +357,7 @@ export default function RecepcaoPage() {
                 </div>
               )}
 
-              {/* ABA PAINEL - mantido igual */}
+              {/* ABA PAINEL */}
               {aba === 'painel' && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:16 }}>
 
@@ -604,7 +404,7 @@ export default function RecepcaoPage() {
                     ))}
                   </div>
 
-                  {/* Painel lateral direito - mantido igual */}
+                  {/* Painel lateral direito */}
                   <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
                     {/* Controles */}
@@ -655,65 +455,18 @@ export default function RecepcaoPage() {
                 </div>
               )}
 
-              {/* ABA CADASTRO - COM INTEGRAÇÃO CADSUS */}
+              {/* ABA CADASTRO */}
               {aba === 'cadastro' && (
                 <div>
                   <form onSubmit={salvarPaciente}>
-                    {/* Destaque para busca no CadSUS */}
-                    <div style={{ 
-                      background: '#e8f4fd', 
-                      borderRadius: 10, 
-                      padding: '12px 16px', 
-                      marginBottom: 16,
-                      border: '1px solid #b3d9f5'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 20 }}>🔍</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#075985', marginBottom: 2 }}>
-                            Busca automática no CadSUS
-                          </div>
-                          <div style={{ fontSize: 10, color: '#0369a1' }}>
-                            Digite o CPF e os dados serão preenchidos automaticamente a partir do Cadastro Nacional
-                          </div>
-                        </div>
-                        {buscandoCadSUS && (
-                          <div style={{ fontSize: 12, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span>⏳</span> Buscando...
-                          </div>
-                        )}
-                        {cpfEncontrado && (
-                          <div style={{ fontSize: 12, color: '#059669', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span>✅</span> CadSUS
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                       <div style={{ gridColumn:'span 2' }}>
-                        <label style={lbl}>CPF * (para busca no CadSUS)</label>
-                        <input 
-                          style={{...inp, borderColor: cpfEncontrado ? '#10b981' : '#e2e8f0'}} 
-                          value={form.cpf} 
-                          onChange={e => handleCpfChange(e.target.value)} 
-                          placeholder="000.000.000-00"
-                        />
-                        {cpfEncontrado && (
-                          <div style={{ fontSize: 10, color: '#10b981', marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span>✅</span> Paciente encontrado no Cadastro Nacional. Dados preenchidos automaticamente.
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ gridColumn:'span 2' }}>
                         <label style={lbl}>Nome completo *</label>
-                        <input 
-                          style={inp} 
-                          value={form.nome} 
-                          onChange={e=>setForm(f=>({...f,nome:e.target.value}))} 
-                          required 
-                          placeholder="Nome do paciente"
-                        />
+                        <input style={inp} value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} required placeholder="Nome do paciente" />
+                      </div>
+                      <div>
+                        <label style={lbl}>CPF</label>
+                        <input style={inp} value={form.cpf} onChange={e=>setForm(f=>({...f,cpf:e.target.value}))} placeholder="000.000.000-00" />
                       </div>
                       <div>
                         <label style={lbl}>Data de nascimento *</label>
@@ -728,20 +481,8 @@ export default function RecepcaoPage() {
                         </select>
                       </div>
                       <div>
-                        <label style={lbl}>Município *</label>
+                        <label style={lbl}>Municipio *</label>
                         <input style={inp} value={form.municipio} onChange={e=>setForm(f=>({...f,municipio:e.target.value}))} required placeholder="Cidade" />
-                      </div>
-                      <div>
-                        <label style={lbl}>CNS (CadSUS)</label>
-                        <input style={inp} value={form.cns} onChange={e=>setForm(f=>({...f,cns:e.target.value}))} placeholder="Número do Cartão SUS" />
-                      </div>
-                      <div>
-                        <label style={lbl}>Telefone</label>
-                        <input style={inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))} placeholder="(00) 00000-0000" />
-                      </div>
-                      <div>
-                        <label style={lbl}>Endereço</label>
-                        <input style={inp} value={form.endereco} onChange={e=>setForm(f=>({...f,endereco:e.target.value}))} placeholder="Rua, número, bairro" />
                       </div>
                       <div style={{ gridColumn:'span 2' }}>
                         <label style={lbl}>Especialidade</label>
