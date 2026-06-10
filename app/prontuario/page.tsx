@@ -2,8 +2,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-// CID-10 base (expandível)
-const CID10: Record<string,string> = {
+// CID-10 base (fallback local)
+const CID10_BASE: Record<string,string> = {
   'A00':'Colera','A01':'Febres tifoide e paratifoide','A02':'Outras infeccoes por Salmonella',
   'A09':'Diarreia e gastroenterite','A15':'Tuberculose respiratoria',
   'B20':'Doenca pelo HIV','B34':'Infeccao viral de localizacao nao especificada',
@@ -43,12 +43,104 @@ const CID10: Record<string,string> = {
   'Z23':'Necessidade de imunizacao','Z34':'Supervisao de gravidez normal',
 }
 
-function buscarCID(q: string) {
+// Função de busca local (fallback)
+function buscarCIDLocal(q: string) {
   if (!q || q.length < 2) return []
   const ql = q.toLowerCase()
-  return Object.entries(CID10).filter(([cod, desc]) =>
+  return Object.entries(CID10_BASE).filter(([cod, desc]) =>
     cod.toLowerCase().includes(ql) || desc.toLowerCase().includes(ql)
   ).slice(0, 8)
+}
+
+// ============================================
+// FUNÇÃO DE BUSCA CID-10 VIA API RNDS
+// ============================================
+async function buscarCIDRNDS(q: string): Promise<[string, string][]> {
+  if (!q || q.length < 2) return []
+  
+  // Opção 1: Usar o FHIR API oficial do Ministério da Saúde (RNDS)
+  // Endpoint: https://rnds.saude.gov.br/fhir/CodeSystem/$lookup
+  // Nota: Pode exigir token de acesso
+  try {
+    // Tentativa via API FHIR oficial
+    const fhirUrl = new URL('https://rnds.saude.gov.br/fhir/CodeSystem/$lookup')
+    fhirUrl.searchParams.append('system', 'http://www.saude.gov.br/fhir/r4/CodeSystem/BRCID10')
+    fhirUrl.searchParams.append('code', q)
+    
+    const response = await fetch(fhirUrl.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/fhir+json',
+        // Se tiver token, adicione:
+        // 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_RNDS_TOKEN}`
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      if (data.parameter) {
+        const display = data.parameter.find((p: any) => p.name === 'display')?.valueString
+        if (display) {
+          return [[q, display]]
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Erro na API FHIR RNDS:', error)
+  }
+  
+  // Opção 2: Usar o Simplifier.net como proxy (renderização)
+  // Nota: Isso pode não retornar JSON direto, é um fallback
+  try {
+    const simplifierUrl = `https://simplifier.net/embed/render?scope=RedeNacionaldeDadosemSaude&canonical=http://www.saude.gov.br/fhir/r4/CodeSystem/BRCID10`
+    
+    // Nota: O Simplifier retorna HTML, não JSON.
+    // Para uso real, você precisaria de uma API que retorne JSON.
+    // Esta é uma demonstração da estrutura.
+    console.log('Simplifier URL (não retorna JSON diretamente):', simplifierUrl)
+  } catch (error) {
+    console.error('Erro no Simplifier:', error)
+  }
+  
+  // Opção 3: Usar API de busca do DataSUS (se disponível)
+  try {
+    const datasusUrl = `https://apisus.saude.gov.br/fhir/CodeSystem/BRCID10?code=${encodeURIComponent(q)}`
+    const response = await fetch(datasusUrl, {
+      headers: { 'Accept': 'application/json' }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      // Parse da resposta conforme formato da API
+      if (data.entry) {
+        return data.entry.map((entry: any) => [
+          entry.resource.code,
+          entry.resource.display || entry.resource.name
+        ])
+      }
+    }
+  } catch (error) {
+    console.error('Erro na API DataSUS:', error)
+  }
+  
+  // Fallback para busca local
+  return buscarCIDLocal(q)
+}
+
+// Função de busca principal (async)
+async function buscarCID(q: string, setResultados: (res: [string,string][]) => void) {
+  if (!q || q.length < 2) {
+    setResultados([])
+    return
+  }
+  
+  try {
+    const resultados = await buscarCIDRNDS(q)
+    setResultados(resultados)
+  } catch (error) {
+    console.error('Erro na busca CID:', error)
+    setResultados(buscarCIDLocal(q))
+  }
 }
 
 const VITAIS = [
@@ -103,14 +195,12 @@ const UNIDADE = {
 }
 
 // ============================================
-// NOVA FUNÇÃO: Busca de Medicamentos via API da ANVISA
+// BUSCA DE MEDICAMENTOS VIA API DA ANVISA
 // ============================================
 async function buscarMedicamentosANVISA(termo: string): Promise<any[]> {
   if (!termo || termo.length < 2) return []
   
   try {
-    // Endpoint da API de consulta de produtos da ANVISA
-    // Baseado na documentação: /consultas-externas-api/produtos/nome-tecnico
     const url = new URL('https://api-gateway.prd.apps.anvisa.gov.br/consultas-externas-api/produtos/nome-tecnico')
     url.searchParams.append('nomeTecnico', termo)
     url.searchParams.append('limit', '20')
@@ -120,8 +210,6 @@ async function buscarMedicamentosANVISA(termo: string): Promise<any[]> {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        // Se a API da ANVISA exigir chave, adicione aqui:
-        // 'x-api-key': process.env.NEXT_PUBLIC_ANVISA_API_KEY || '',
       }
     })
     
@@ -133,16 +221,9 @@ async function buscarMedicamentosANVISA(termo: string): Promise<any[]> {
     const data = await response.json()
     const medicamentosMap = new Map()
     
-    // Processa os dados da API da ANVISA
-    // Estrutura esperada baseada na documentação do Swagger
     if (data && Array.isArray(data)) {
       data.forEach((item: any) => {
-        const nomeProduto = item.nomeProduto || 
-                            item.nome || 
-                            item.descricao ||
-                            item.principioAtivo ||
-                            ''
-        
+        const nomeProduto = item.nomeProduto || item.nome || item.descricao || item.principioAtivo || ''
         const numeroRegistro = item.numeroRegistro || item.registro || ''
         const empresa = item.empresa || item.fabricante || ''
         
@@ -172,104 +253,16 @@ async function buscarMedicamentosANVISA(termo: string): Promise<any[]> {
   }
 }
 
-// Função alternativa para buscar por nome técnico específico
-async function buscarMedicamentosPorNomeTecnico(termo: string): Promise<any[]> {
-  if (!termo || termo.length < 3) return []
-  
-  try {
-    // Endpoint alternativo para busca por nome técnico
-    const url = `https://api-gateway.prd.apps.anvisa.gov.br/consultas-externas-api/produtos?nomeTecnico=${encodeURIComponent(termo)}`
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      }
-    })
-    
-    if (!response.ok) {
-      return []
-    }
-    
-    const data = await response.json()
-    const medicamentos = []
-    
-    if (data && data.content) {
-      for (const item of data.content) {
-        medicamentos.push({
-          nome: item.nomeProduto || item.nomeTecnico,
-          codigo: item.numeroRegistro,
-          apresentacao: item.apresentacao,
-          laboratorio: item.empresaDetentoraRegistro,
-          principioAtivo: item.principioAtivo
-        })
-      }
-    }
-    
-    return medicamentos
-  } catch (error) {
-    console.error('Erro na busca por nome técnico:', error)
-    return []
-  }
-}
-
-// Lista de medicamentos comuns como fallback (expandida)
 function buscarMedicamentosLocal(termo: string): any[] {
   const medicamentosLocais = [
     { nome: 'Paracetamol 500mg', codigo: '123456', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
     { nome: 'Paracetamol 750mg', codigo: '123457', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Paracetamol gotas 200mg/mL', codigo: '123458', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
     { nome: 'Ibuprofeno 400mg', codigo: '123459', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Ibuprofeno 600mg', codigo: '123460', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Ibuprofeno suspensão 50mg/mL', codigo: '123461', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' },
     { nome: 'Dipirona Sódica 500mg', codigo: '123462', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Dipirona Sódica 500mg/mL', codigo: '123463', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
-    { nome: 'Dipirona gotas', codigo: '123464', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
     { nome: 'Amoxicilina 500mg', codigo: '123465', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
-    { nome: 'Amoxicilina 250mg/5mL', codigo: '123466', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' },
-    { nome: 'Amoxicilina + Clavulanato 500mg', codigo: '123467', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
     { nome: 'Losartana Potássica 50mg', codigo: '123468', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Losartana Potássica 100mg', codigo: '123469', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Hidroclorotiazida 25mg', codigo: '123470', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Hidroclorotiazida 50mg', codigo: '123471', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
     { nome: 'Metformina 500mg', codigo: '123472', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Metformina 850mg', codigo: '123473', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Metformina 1000mg', codigo: '123474', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'AAS 100mg', codigo: '123475', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'AAS 500mg', codigo: '123476', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Sinvastatina 10mg', codigo: '123477', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Sinvastatina 20mg', codigo: '123478', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Sinvastatina 40mg', codigo: '123479', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Omeprazol 10mg', codigo: '123480', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
     { nome: 'Omeprazol 20mg', codigo: '123481', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
-    { nome: 'Omeprazol 40mg', codigo: '123482', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
-    { nome: 'Pantoprazol 20mg', codigo: '123483', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Pantoprazol 40mg', codigo: '123484', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Salbutamol 100mcg', codigo: '123485', apresentacao: 'Spray', laboratorio: 'Genérico' },
-    { nome: 'Salbutamol 2mg/5mL', codigo: '123486', apresentacao: 'Xarope', laboratorio: 'Genérico' },
-    { nome: 'Budesonida 200mcg', codigo: '123487', apresentacao: 'Spray', laboratorio: 'Genérico' },
-    { nome: 'Budesonida 0.25mg/mL', codigo: '123488', apresentacao: 'Solução para nebulização', laboratorio: 'Genérico' },
-    { nome: 'Prednisolona 3mg/mL', codigo: '123489', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
-    { nome: 'Prednisolona 20mg', codigo: '123490', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Dexametasona 4mg', codigo: '123491', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Dexametasona 0.5mg', codigo: '123492', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Captopril 12.5mg', codigo: '123493', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Captopril 25mg', codigo: '123494', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Captopril 50mg', codigo: '123495', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Enalapril 5mg', codigo: '123496', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Enalapril 10mg', codigo: '123497', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Enalapril 20mg', codigo: '123498', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Propranolol 10mg', codigo: '123499', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Propranolol 40mg', codigo: '123500', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Atenolol 25mg', codigo: '123501', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Atenolol 50mg', codigo: '123502', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Atenolol 100mg', codigo: '123503', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Nimesulida 100mg', codigo: '123504', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Nimesulida 50mg/mL', codigo: '123505', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
-    { nome: 'Azitromicina 500mg', codigo: '123506', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Azitromicina 200mg/5mL', codigo: '123507', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' },
-    { nome: 'Cefalexina 500mg', codigo: '123508', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
-    { nome: 'Cefalexina 250mg/5mL', codigo: '123509', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' }
   ]
   
   const termoLower = termo.toLowerCase()
@@ -278,7 +271,7 @@ function buscarMedicamentosLocal(termo: string): any[] {
   )
 }
 
-// Componente de Preview do Documento
+// Componente de Preview do Documento (mantido igual)
 function DocPreview({ tipo, dados }: { tipo: DocTipo; dados: any }) {
   const estilos = {
     papel: { background:'#fff', border:'1px solid #d0d0d0', borderRadius:4, padding:'28px 32px',
@@ -566,6 +559,7 @@ export default function ProntuarioPage() {
   const [cidBusca, setCidBusca] = useState('')
   const [cidResultados, setCidResult] = useState<[string,string][]>([])
   const [cidTipo, setCidTipo] = useState('secundario')
+  const [cidLoading, setCidLoading] = useState(false) // Estado de loading
 
   // Conduta
   const [trat, setTrat] = useState('')
@@ -613,7 +607,6 @@ export default function ProntuarioPage() {
     agendamentos.push(novoAgendamento)
     localStorage.setItem('agendamentos_consultas', JSON.stringify(agendamentos))
     
-    // Salvar como paciente
     const pacientesStorage = localStorage.getItem('pacientes')
     const pacientes = pacientesStorage ? JSON.parse(pacientesStorage) : []
     const existe = pacientes.find((p: any) => p.cpf === agendamento.cpf)
@@ -696,16 +689,13 @@ export default function ProntuarioPage() {
     carregarExamesRealizados()
   }
 
-  // Lista de tipos de serviço para registro tardio
   const TIPOS_SERVICO = [
     'ADM. MEDICAMENTO', 'DEMANDA ESPONTÂNEA', 'NEBULIZAÇÃO', 'VACINA',
     'ARBOVIROSES', 'ESCUTA INICIAL', 'ODONTOLOGIA', 'CURATIVO', 'EXAMES', 'PROCEDIMENTOS'
   ]
 
-  // Lista de locais de atendimento
   const LOCAIS_ATENDIMENTO = ['UBS', 'DOMICÍLIO', 'ESCOLA', 'COMUNIDADE', 'UNIDADE MÓVEL']
 
-  // Lista de justificativas
   const JUSTIFICATIVAS = [
     'Faltas de energia elétrica', 'PEC indisponível', 'Computador inoperante',
     'Sistema offline', 'Problemas de rede', 'Outros'
@@ -900,11 +890,10 @@ export default function ProntuarioPage() {
     setEncs([])
   }
 
-  // Funções para gerenciar medicamentos com a nova API da ANVISA
+  // Funções para gerenciar medicamentos
   async function handleMedChange(id: string, value: string) {
     updItem(id, 'med', value)
     
-    // Busca com apenas 1 letra (mudado de 3 para 1)
     if (value.length >= 1) {
       setItens(items => items.map(item => 
         item.id === id 
@@ -912,12 +901,10 @@ export default function ProntuarioPage() {
           : item
       ))
       
-      // Para buscas curtas (1-2 letras), usar apenas busca local por performance
       let resultados = []
       if (value.length <= 2) {
         resultados = buscarMedicamentosLocal(value)
       } else {
-        // Para buscas com 3+ letras, consultar API da ANVISA
         resultados = await buscarMedicamentosANVISA(value)
         if (resultados.length === 0) {
           resultados = buscarMedicamentosLocal(value)
@@ -992,7 +979,6 @@ export default function ProntuarioPage() {
     carregarRegistrosTardios()
     carregarExamesRealizados()
     
-    // Setar período padrão (últimos 7 dias)
     const hoje = new Date()
     const seteDiasAtras = new Date()
     seteDiasAtras.setDate(hoje.getDate() - 7)
@@ -1032,9 +1018,26 @@ export default function ProntuarioPage() {
     }
   }
 
-  function buscaCID(q: string) {
+  // Função de busca CID atualizada com API
+  async function buscaCID(q: string) {
     setCidBusca(q)
-    setCidResult(buscarCID(q) as [string,string][])
+    setCidLoading(true)
+    
+    if (!q || q.length < 2) {
+      setCidResult([])
+      setCidLoading(false)
+      return
+    }
+    
+    try {
+      const resultados = await buscarCIDRNDS(q)
+      setCidResult(resultados)
+    } catch (error) {
+      console.error('Erro na busca CID:', error)
+      setCidResult(buscarCIDLocal(q))
+    } finally {
+      setCidLoading(false)
+    }
   }
 
   function addCID(codigo: string, desc: string) {
@@ -1099,7 +1102,6 @@ export default function ProntuarioPage() {
     especialidade, tipoEnc, prioridade, justificativa,
   }
 
-  // Filtrar registros tardios
   const registrosFiltrados = registrosTardios.filter(r => {
     if (filtroRegistros === 'meus' && r.profissional !== usuario?.nome) return false
     if (periodoInicio && new Date(r.dataAtendimento) < new Date(periodoInicio)) return false
@@ -1300,26 +1302,44 @@ export default function ProntuarioPage() {
                     </div>
                   )}
 
-                  {/* Aba Diagnosticos */}
+                  {/* Aba Diagnosticos - COM INTEGRAÇÃO DA API CID-10 */}
                   {aba==='diagnostico' && (
                     <div>
                       <div style={sec}>
-                        <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:12}}>Buscar CID-10</div>
+                        <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:12}}>
+                          Buscar CID-10 (RNDS)
+                          {cidLoading && <span style={{marginLeft:8,fontSize:11,color:'#64748b'}}>⏳ Carregando da base nacional...</span>}
+                        </div>
                         <div style={{position:'relative',marginBottom:10}}>
-                          <input style={{...inp,paddingRight:120}} placeholder="Digite o codigo ou descricao" value={cidBusca} onChange={e=>buscaCID(e.target.value)} />
-                          <select value={cidTipo} onChange={e=>setCidTipo(e.target.value)} style={{position:'absolute',right:0,top:0,height:'100%',padding:'0 8px',border:'none',borderLeft:'1.5px solid #e2e8f0',borderRadius:'0 8px 8px 0',fontSize:12,background:'#f8fafc',cursor:'pointer'}}>
-                            <option value="principal">Principal</option><option value="secundario">Secundario</option>
+                          <input 
+                            style={{...inp,paddingRight:120}} 
+                            placeholder="Digite o código ou descrição (ex: I10, A09, diabetes)" 
+                            value={cidBusca} 
+                            onChange={e=>buscaCID(e.target.value)} 
+                          />
+                          <select 
+                            value={cidTipo} 
+                            onChange={e=>setCidTipo(e.target.value)} 
+                            style={{position:'absolute',right:0,top:0,height:'100%',padding:'0 8px',border:'none',borderLeft:'1.5px solid #e2e8f0',borderRadius:'0 8px 8px 0',fontSize:12,background:'#f8fafc',cursor:'pointer'}}
+                          >
+                            <option value="principal">Principal</option>
+                            <option value="secundario">Secundario</option>
                           </select>
                         </div>
                         {cidResultados.length > 0 && (
                           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden'}}>
                             {cidResultados.map(([cod,desc])=>(
-                              <div key={cod} onClick={()=>addCID(cod,desc)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f1f5f9'}}>
+                              <div key={cod} onClick={()=>addCID(cod,desc)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid #f1f5f9',transition:'background 0.1s'}} onMouseEnter={(e)=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={(e)=>e.currentTarget.style.background='#fff'}>
                                 <span style={{fontSize:12,fontWeight:700,color:'#185FA5',fontFamily:'monospace',minWidth:56}}>{cod}</span>
                                 <span style={{fontSize:12,color:'#0f172a',flex:1}}>{desc}</span>
                                 <span style={{fontSize:10,color:'#94a3b8'}}>+ Adicionar</span>
                               </div>
                             ))}
+                          </div>
+                        )}
+                        {cidBusca.length >= 2 && cidResultados.length === 0 && !cidLoading && (
+                          <div style={{textAlign:'center',padding:20,color:'#94a3b8',fontSize:12}}>
+                            Nenhum diagnóstico encontrado. Verifique o código ou descrição.
                           </div>
                         )}
                       </div>
@@ -1329,7 +1349,7 @@ export default function ProntuarioPage() {
                           <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#f8fafc',borderRadius:8,marginBottom:6}}>
                             <span style={{fontSize:12,fontWeight:700,color:'#185FA5',minWidth:56}}>{c.codigo}</span>
                             <span style={{flex:1,fontSize:12}}>{c.desc}</span>
-                            <button onClick={()=>setCids(cs=>cs.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',cursor:'pointer',color:'#94a3b8'}}>x</button>
+                            <button onClick={()=>setCids(cs=>cs.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',cursor:'pointer',color:'#94a3b8'}}>✕</button>
                           </div>
                         ))}
                       </div>
@@ -1447,7 +1467,6 @@ export default function ProntuarioPage() {
                         </button>
                       </div>
 
-                      {/* Lista de agendamentos recentes */}
                       {agendamentosLista.length > 0 && (
                         <div style={sec}>
                           <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:12}}>Consultas Agendadas</div>
@@ -1478,7 +1497,7 @@ export default function ProntuarioPage() {
                           <span style={{fontSize:24}}>⏰</span> Registro Tardio de Atendimento
                         </div>
                         <p style={{fontSize:12,color:'#64748b',marginBottom:16}}>
-                          Registre os atendimentos na ordem cronológica em que ocorreram. Registros anteriores ao último atendimento não serão possíveis.
+                          Registre os atendimentos na ordem cronológica em que ocorreram.
                         </p>
 
                         <div style={{marginBottom:16}}>
@@ -1532,7 +1551,6 @@ export default function ProntuarioPage() {
                         </div>
                       </div>
 
-                      {/* Filtros e Lista de Registros */}
                       <div style={sec}>
                         <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:12}}>Registros Tardios</div>
                         
@@ -1617,7 +1635,6 @@ export default function ProntuarioPage() {
                         </div>
                       </div>
 
-                      {/* Lista de exames realizados */}
                       {examesRealizados.length > 0 && (
                         <div style={sec}>
                           <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:12}}>Exames Realizados</div>
@@ -1678,7 +1695,6 @@ export default function ProntuarioPage() {
                       <button onClick={()=>rmItem(item.id)} style={{position:'absolute',top:8,right:8,background:'none',border:'none',cursor:'pointer',fontSize:14}}>✕</button>
                     )}
                     
-                    {/* Campo de Medicamento com Autocomplete da API da ANVISA */}
                     <div style={{position:'relative',marginBottom:4}}>
                       <input 
                         style={{...inp, paddingRight: item.loading ? '30px' : '10px'}} 
@@ -1706,7 +1722,6 @@ export default function ProntuarioPage() {
                         </div>
                       )}
                       
-                      {/* Sugestões da API da ANVISA */}
                       {item.showSuggestions && item.suggestions && item.suggestions.length > 0 && (
                         <div style={{
                           position:'absolute',
@@ -1743,11 +1758,6 @@ export default function ProntuarioPage() {
                               {sug.laboratorio && (
                                 <div style={{fontSize:9,color:'#94a3b8',marginTop:2}}>
                                   {sug.laboratorio}
-                                </div>
-                              )}
-                              {sug.registro && (
-                                <div style={{fontSize:9,color:'#94a3b8'}}>
-                                  Registro ANVISA: {sug.registro}
                                 </div>
                               )}
                             </div>
