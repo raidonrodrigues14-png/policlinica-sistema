@@ -102,16 +102,85 @@ const UNIDADE = {
   telefone:   '(99) 3333-4444',
 }
 
-// Função para buscar medicamentos da API do BNAFAR/Hórus
-async function buscarMedicamentosAPI(termo: string): Promise<any[]> {
+// ============================================
+// NOVA FUNÇÃO: Busca de Medicamentos via API da ANVISA
+// ============================================
+async function buscarMedicamentosANVISA(termo: string): Promise<any[]> {
+  if (!termo || termo.length < 2) return []
+  
+  try {
+    // Endpoint da API de consulta de produtos da ANVISA
+    // Baseado na documentação: /consultas-externas-api/produtos/nome-tecnico
+    const url = new URL('https://api-gateway.prd.apps.anvisa.gov.br/consultas-externas-api/produtos/nome-tecnico')
+    url.searchParams.append('nomeTecnico', termo)
+    url.searchParams.append('limit', '20')
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        // Se a API da ANVISA exigir chave, adicione aqui:
+        // 'x-api-key': process.env.NEXT_PUBLIC_ANVISA_API_KEY || '',
+      }
+    })
+    
+    if (!response.ok) {
+      console.warn(`API ANVISA retornou status ${response.status}`)
+      return buscarMedicamentosLocal(termo)
+    }
+    
+    const data = await response.json()
+    const medicamentosMap = new Map()
+    
+    // Processa os dados da API da ANVISA
+    // Estrutura esperada baseada na documentação do Swagger
+    if (data && Array.isArray(data)) {
+      data.forEach((item: any) => {
+        const nomeProduto = item.nomeProduto || 
+                            item.nome || 
+                            item.descricao ||
+                            item.principioAtivo ||
+                            ''
+        
+        const numeroRegistro = item.numeroRegistro || item.registro || ''
+        const empresa = item.empresa || item.fabricante || ''
+        
+        if (nomeProduto && nomeProduto.toLowerCase().includes(termo.toLowerCase())) {
+          if (!medicamentosMap.has(nomeProduto)) {
+            medicamentosMap.set(nomeProduto, {
+              nome: nomeProduto,
+              codigo: numeroRegistro,
+              apresentacao: item.apresentacao || item.formaFarmaceutica || '',
+              laboratorio: empresa,
+              registro: numeroRegistro,
+              principioAtivo: item.principioAtivo || ''
+            })
+          }
+        }
+      })
+    }
+    
+    if (medicamentosMap.size === 0) {
+      return buscarMedicamentosLocal(termo)
+    }
+    
+    return Array.from(medicamentosMap.values()).slice(0, 15)
+  } catch (error) {
+    console.error('Erro ao buscar medicamentos na API da ANVISA:', error)
+    return buscarMedicamentosLocal(termo)
+  }
+}
+
+// Função alternativa para buscar por nome técnico específico
+async function buscarMedicamentosPorNomeTecnico(termo: string): Promise<any[]> {
   if (!termo || termo.length < 3) return []
   
   try {
-    const url = new URL('https://apidadosabertos.saude.gov.br/v1/daf/estoque_medicamentos_bnafar_horus')
-    url.searchParams.append('limit', '50')
-    url.searchParams.append('offset', '0')
+    // Endpoint alternativo para busca por nome técnico
+    const url = `https://api-gateway.prd.apps.anvisa.gov.br/consultas-externas-api/produtos?nomeTecnico=${encodeURIComponent(termo)}`
     
-    const response = await fetch(url.toString(), {
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -119,79 +188,93 @@ async function buscarMedicamentosAPI(termo: string): Promise<any[]> {
     })
     
     if (!response.ok) {
-      console.warn(`API retornou status ${response.status}`)
       return []
     }
     
     const data = await response.json()
-    const medicamentosMap = new Map()
+    const medicamentos = []
     
-    // Processa os dados da API
-    if (data && Array.isArray(data)) {
-      data.forEach((item: any) => {
-        // Tenta extrair o nome do medicamento de diferentes campos possíveis
-        const nomeMed = item.nome_medicamento || 
-                        item.medicamento || 
-                        item.descricao_item || 
-                        item.descricao ||
-                        item.nome_produto ||
-                        ''
-        
-        const codigo = item.codigo_catmat || item.codigo_item || ''
-        
-        if (nomeMed && nomeMed.toLowerCase().includes(termo.toLowerCase())) {
-          if (!medicamentosMap.has(nomeMed)) {
-            medicamentosMap.set(nomeMed, {
-              nome: nomeMed,
-              codigo: codigo,
-              apresentacao: item.apresentacao || item.unidade_fornecimento || '',
-              laboratorio: item.laboratorio || item.fabricante || ''
-            })
-          }
-        }
-      })
+    if (data && data.content) {
+      for (const item of data.content) {
+        medicamentos.push({
+          nome: item.nomeProduto || item.nomeTecnico,
+          codigo: item.numeroRegistro,
+          apresentacao: item.apresentacao,
+          laboratorio: item.empresaDetentoraRegistro,
+          principioAtivo: item.principioAtivo
+        })
+      }
     }
     
-    // Se não encontrou na API, usa fallback local
-    if (medicamentosMap.size === 0) {
-      return buscarMedicamentosLocal(termo)
-    }
-    
-    return Array.from(medicamentosMap.values()).slice(0, 15)
+    return medicamentos
   } catch (error) {
-    console.error('Erro ao buscar medicamentos na API:', error)
-    // Fallback para busca local
-    return buscarMedicamentosLocal(termo)
+    console.error('Erro na busca por nome técnico:', error)
+    return []
   }
 }
 
-// Lista de medicamentos comuns como fallback
+// Lista de medicamentos comuns como fallback (expandida)
 function buscarMedicamentosLocal(termo: string): any[] {
   const medicamentosLocais = [
     { nome: 'Paracetamol 500mg', codigo: '123456', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Ibuprofeno 400mg', codigo: '123457', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Dipirona Sódica 500mg/mL', codigo: '123458', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
-    { nome: 'Amoxicilina 500mg', codigo: '123459', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
-    { nome: 'Losartana Potássica 50mg', codigo: '123460', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Hidroclorotiazida 25mg', codigo: '123461', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Metformina 850mg', codigo: '123462', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'AAS 100mg', codigo: '123463', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Sinvastatina 20mg', codigo: '123464', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Omeprazol 20mg', codigo: '123465', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
-    { nome: 'Pantoprazol 40mg', codigo: '123466', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Salbutamol 100mcg', codigo: '123467', apresentacao: 'Spray', laboratorio: 'Genérico' },
-    { nome: 'Budesonida 200mcg', codigo: '123468', apresentacao: 'Spray', laboratorio: 'Genérico' },
-    { nome: 'Prednisolona 20mg', codigo: '123469', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Dexametasona 4mg', codigo: '123470', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Captopril 25mg', codigo: '123471', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Enalapril 10mg', codigo: '123472', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Propranolol 40mg', codigo: '123473', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Atenolol 50mg', codigo: '123474', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
-    { nome: 'Nimesulida 100mg', codigo: '123475', apresentacao: 'Comprimido', laboratorio: 'Genérico' }
+    { nome: 'Paracetamol 750mg', codigo: '123457', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Paracetamol gotas 200mg/mL', codigo: '123458', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
+    { nome: 'Ibuprofeno 400mg', codigo: '123459', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Ibuprofeno 600mg', codigo: '123460', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Ibuprofeno suspensão 50mg/mL', codigo: '123461', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' },
+    { nome: 'Dipirona Sódica 500mg', codigo: '123462', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Dipirona Sódica 500mg/mL', codigo: '123463', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
+    { nome: 'Dipirona gotas', codigo: '123464', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
+    { nome: 'Amoxicilina 500mg', codigo: '123465', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Amoxicilina 250mg/5mL', codigo: '123466', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' },
+    { nome: 'Amoxicilina + Clavulanato 500mg', codigo: '123467', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Losartana Potássica 50mg', codigo: '123468', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Losartana Potássica 100mg', codigo: '123469', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Hidroclorotiazida 25mg', codigo: '123470', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Hidroclorotiazida 50mg', codigo: '123471', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Metformina 500mg', codigo: '123472', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Metformina 850mg', codigo: '123473', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Metformina 1000mg', codigo: '123474', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'AAS 100mg', codigo: '123475', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'AAS 500mg', codigo: '123476', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Sinvastatina 10mg', codigo: '123477', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Sinvastatina 20mg', codigo: '123478', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Sinvastatina 40mg', codigo: '123479', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Omeprazol 10mg', codigo: '123480', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Omeprazol 20mg', codigo: '123481', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Omeprazol 40mg', codigo: '123482', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Pantoprazol 20mg', codigo: '123483', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Pantoprazol 40mg', codigo: '123484', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Salbutamol 100mcg', codigo: '123485', apresentacao: 'Spray', laboratorio: 'Genérico' },
+    { nome: 'Salbutamol 2mg/5mL', codigo: '123486', apresentacao: 'Xarope', laboratorio: 'Genérico' },
+    { nome: 'Budesonida 200mcg', codigo: '123487', apresentacao: 'Spray', laboratorio: 'Genérico' },
+    { nome: 'Budesonida 0.25mg/mL', codigo: '123488', apresentacao: 'Solução para nebulização', laboratorio: 'Genérico' },
+    { nome: 'Prednisolona 3mg/mL', codigo: '123489', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
+    { nome: 'Prednisolona 20mg', codigo: '123490', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Dexametasona 4mg', codigo: '123491', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Dexametasona 0.5mg', codigo: '123492', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Captopril 12.5mg', codigo: '123493', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Captopril 25mg', codigo: '123494', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Captopril 50mg', codigo: '123495', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Enalapril 5mg', codigo: '123496', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Enalapril 10mg', codigo: '123497', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Enalapril 20mg', codigo: '123498', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Propranolol 10mg', codigo: '123499', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Propranolol 40mg', codigo: '123500', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Atenolol 25mg', codigo: '123501', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Atenolol 50mg', codigo: '123502', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Atenolol 100mg', codigo: '123503', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Nimesulida 100mg', codigo: '123504', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Nimesulida 50mg/mL', codigo: '123505', apresentacao: 'Solução oral', laboratorio: 'Genérico' },
+    { nome: 'Azitromicina 500mg', codigo: '123506', apresentacao: 'Comprimido', laboratorio: 'Genérico' },
+    { nome: 'Azitromicina 200mg/5mL', codigo: '123507', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' },
+    { nome: 'Cefalexina 500mg', codigo: '123508', apresentacao: 'Cápsula', laboratorio: 'Genérico' },
+    { nome: 'Cefalexina 250mg/5mL', codigo: '123509', apresentacao: 'Suspensão oral', laboratorio: 'Genérico' }
   ]
   
+  const termoLower = termo.toLowerCase()
   return medicamentosLocais.filter(m => 
-    m.nome.toLowerCase().includes(termo.toLowerCase())
+    m.nome.toLowerCase().includes(termoLower)
   )
 }
 
@@ -817,20 +900,29 @@ export default function ProntuarioPage() {
     setEncs([])
   }
 
-  // Funções para gerenciar medicamentos com API
+  // Funções para gerenciar medicamentos com a nova API da ANVISA
   async function handleMedChange(id: string, value: string) {
-    // Atualiza o valor do campo
     updItem(id, 'med', value)
     
-    // Busca sugestões da API se tiver 3+ caracteres
-    if (value.length >= 3) {
+    // Busca com apenas 1 letra (mudado de 3 para 1)
+    if (value.length >= 1) {
       setItens(items => items.map(item => 
         item.id === id 
           ? { ...item, loading: true, showSuggestions: true }
           : item
       ))
       
-      const resultados = await buscarMedicamentosAPI(value)
+      // Para buscas curtas (1-2 letras), usar apenas busca local por performance
+      let resultados = []
+      if (value.length <= 2) {
+        resultados = buscarMedicamentosLocal(value)
+      } else {
+        // Para buscas com 3+ letras, consultar API da ANVISA
+        resultados = await buscarMedicamentosANVISA(value)
+        if (resultados.length === 0) {
+          resultados = buscarMedicamentosLocal(value)
+        }
+      }
       
       setItens(items => items.map(item => 
         item.id === id 
@@ -1586,15 +1678,15 @@ export default function ProntuarioPage() {
                       <button onClick={()=>rmItem(item.id)} style={{position:'absolute',top:8,right:8,background:'none',border:'none',cursor:'pointer',fontSize:14}}>✕</button>
                     )}
                     
-                    {/* Campo de Medicamento com Autocomplete da API */}
+                    {/* Campo de Medicamento com Autocomplete da API da ANVISA */}
                     <div style={{position:'relative',marginBottom:4}}>
                       <input 
                         style={{...inp, paddingRight: item.loading ? '30px' : '10px'}} 
-                        placeholder="🔍 Medicamento (digite 3+ letras - Busca na Base Nacional do SUS)" 
+                        placeholder="🔍 Medicamento (digite para buscar na base da ANVISA)" 
                         value={item.med} 
                         onChange={e => handleMedChange(item.id, e.target.value)}
                         onFocus={() => {
-                          if (item.med && item.med.length >= 3 && (!item.suggestions || item.suggestions.length === 0)) {
+                          if (item.med && item.med.length >= 1 && (!item.suggestions || item.suggestions.length === 0)) {
                             handleMedChange(item.id, item.med)
                           }
                         }}
@@ -1614,7 +1706,7 @@ export default function ProntuarioPage() {
                         </div>
                       )}
                       
-                      {/* Sugestões da API */}
+                      {/* Sugestões da API da ANVISA */}
                       {item.showSuggestions && item.suggestions && item.suggestions.length > 0 && (
                         <div style={{
                           position:'absolute',
@@ -1648,9 +1740,14 @@ export default function ProntuarioPage() {
                                   {sug.apresentacao}
                                 </div>
                               )}
-                              {sug.codigo && (
+                              {sug.laboratorio && (
                                 <div style={{fontSize:9,color:'#94a3b8',marginTop:2}}>
-                                  CATMAT: {sug.codigo}
+                                  {sug.laboratorio}
+                                </div>
+                              )}
+                              {sug.registro && (
+                                <div style={{fontSize:9,color:'#94a3b8'}}>
+                                  Registro ANVISA: {sug.registro}
                                 </div>
                               )}
                             </div>
@@ -1681,7 +1778,7 @@ export default function ProntuarioPage() {
                     />
                     
                     <div style={{fontSize:9,color:'#94a3b8',marginTop:4,display:'flex',alignItems:'center',gap:4}}>
-                      <span>🏥</span> Dados da Base Nacional de Medicamentos (BNAFAR/Hórus - SUS)
+                      <span>🏛️</span> Dados da ANVISA - Consulta de Produtos
                     </div>
                   </div>
                 ))}
