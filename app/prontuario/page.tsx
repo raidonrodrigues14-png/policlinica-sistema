@@ -136,46 +136,21 @@ const ABAS: { id: string; l: string; icon: LucideIcon }[] = [
   { id: 'resultadosExames', l: 'Result. Exames', icon: Microscope },
 ]
 
-// ── Busca de medicamentos (ANVISA com fallback local) ──────────
+// ── Busca de medicamentos (ANVISA via rota interna, fallback local) ──
 async function buscarMedicamentosANVISA(termo: string): Promise<any[]> {
   if (!termo || termo.length < 2) return []
   try {
-    const url = new URL('https://api-gateway.prd.apps.anvisa.gov.br/consultas-externas-api/produtos/nome-tecnico')
-    url.searchParams.append('nomeTecnico', termo)
-    url.searchParams.append('limit', '20')
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    })
+    const response = await fetch(`/api/medicamentos?q=${encodeURIComponent(termo)}`)
     if (!response.ok) {
-      console.warn(`API ANVISA retornou status ${response.status}`)
+      console.warn(`Busca de medicamentos retornou status ${response.status}`)
       return buscarMedicamentosLocal(termo)
     }
     const data = await response.json()
-    const medicamentosMap = new Map()
-    if (data && Array.isArray(data)) {
-      data.forEach((item: any) => {
-        const nomeProduto = item.nomeProduto || item.nome || item.descricao || item.principioAtivo || ''
-        const numeroRegistro = item.numeroRegistro || item.registro || ''
-        const empresa = item.empresa || item.fabricante || ''
-        if (nomeProduto && nomeProduto.toLowerCase().includes(termo.toLowerCase())) {
-          if (!medicamentosMap.has(nomeProduto)) {
-            medicamentosMap.set(nomeProduto, {
-              nome: nomeProduto,
-              codigo: numeroRegistro,
-              apresentacao: item.apresentacao || item.formaFarmaceutica || '',
-              laboratorio: empresa,
-              registro: numeroRegistro,
-              principioAtivo: item.principioAtivo || '',
-            })
-          }
-        }
-      })
-    }
-    if (medicamentosMap.size === 0) return buscarMedicamentosLocal(termo)
-    return Array.from(medicamentosMap.values()).slice(0, 15)
+    const resultados = Array.isArray(data?.resultados) ? data.resultados : []
+    if (resultados.length === 0) return buscarMedicamentosLocal(termo)
+    return resultados
   } catch (error) {
-    console.error('Erro ao buscar medicamentos na API da ANVISA:', error)
+    console.error('Erro ao buscar medicamentos:', error)
     return buscarMedicamentosLocal(termo)
   }
 }
