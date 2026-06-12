@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PoliclínicaMed
 
-## Getting Started
+Sistema de prontuário eletrônico e gestão da Policlínica Municipal de Alto Alegre do Maranhão.
 
-First, run the development server:
+## Módulos
+
+| Rota | Módulo | Perfil |
+|---|---|---|
+| `/login` | Acesso por perfil profissional | Todos |
+| `/recepcao` | Fila do dia, painel de chamadas (com voz) e cadastro de pacientes com busca no CadSUS | Recepcionista |
+| `/triagem` | Sinais vitais, IMC e classificação de risco Manchester | Enfermagem |
+| `/prontuario` | Atendimento completo: anamnese, exame físico, CID-10 (RNDS), conduta, encaminhamentos, agendamento, registro tardio e resultados de exames | Médico |
+| `/documentos` | Receituário (busca ANVISA), atestado, declaração, solicitação de exames e encaminhamento — com prévia imprimível | Médico |
+| `/gestao` | Indicadores, produção por profissional, BPA e APAC | Gestor |
+| `/agendar` | Agendamento online público para pacientes | Público |
+
+## Tecnologias
+
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **Tailwind CSS 4** com design system próprio (`app/globals.css`)
+- **lucide-react** para ícones
+- Integrações: RNDS/FHIR (CadSUS e CID-10) e ANVISA (medicamentos), com fallback local
+
+## Como rodar
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Estrutura
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+app/            Rotas e telas (App Router)
+components/     AppShell (sidebar + topbar) e DocPreview (documentos imprimíveis)
+lib/auth.ts     Sessão do usuário e proteção de rotas
+```
 
-## Learn More
+## Avisos importantes
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Autenticação**: o login atual é demonstrativo (credenciais fixas no código). Antes de uso em produção com dados reais de pacientes, implemente autenticação real (ex.: Supabase Auth, já presente nas dependências) e proteção de rotas no servidor.
+- **Dados**: os dados são armazenados no `localStorage` do navegador — não há persistência em banco. Para uso real, conecte um backend (Supabase) respeitando a LGPD.

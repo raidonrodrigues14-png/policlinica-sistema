@@ -1,52 +1,48 @@
-﻿'use client'
+'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  ClipboardList, Tv, UserPlus, Megaphone, Stethoscope, ArrowRight, Search,
+  CheckCircle2, RefreshCw, MapPin, Loader2,
+} from 'lucide-react'
+import AppShell from '@/components/AppShell'
+import { useUsuario } from '@/lib/auth'
 
 const FILA_DEMO = [
-  { id:'1', num:'016', nome:'Joao Santos',    esp:'Clinica Medica', status:'aguardando_triagem', cons:'Consultorio 01' },
-  { id:'2', num:'017', nome:'Ana Rodrigues',  esp:'Pediatria',      status:'aguardando_triagem', cons:'Consultorio 05' },
-  { id:'3', num:'018', nome:'Pedro Alves',    esp:'Ortopedia',      status:'aguardando_medico',  cons:'Consultorio 02' },
-  { id:'4', num:'019', nome:'Lucia Ferreira', esp:'Ginecologia',    status:'aguardando_triagem', cons:'Consultorio 04' },
-  { id:'5', num:'015', nome:'Maria Silva',    esp:'Cardiologia',    status:'aguardando_triagem', cons:'Consultorio 03' },
+  { id: '1', num: '016', nome: 'Joao Santos', esp: 'Clinica Medica', status: 'aguardando_triagem', cons: 'Consultorio 01' },
+  { id: '2', num: '017', nome: 'Ana Rodrigues', esp: 'Pediatria', status: 'aguardando_triagem', cons: 'Consultorio 05' },
+  { id: '3', num: '018', nome: 'Pedro Alves', esp: 'Ortopedia', status: 'aguardando_medico', cons: 'Consultorio 02' },
+  { id: '4', num: '019', nome: 'Lucia Ferreira', esp: 'Ginecologia', status: 'aguardando_triagem', cons: 'Consultorio 04' },
+  { id: '5', num: '015', nome: 'Maria Silva', esp: 'Cardiologia', status: 'aguardando_triagem', cons: 'Consultorio 03' },
 ]
 
-const STATUS_CFG: Record<string,{label:string;bg:string;color:string}> = {
-  aguardando_triagem: { label:'Aguard. triagem', bg:'#fef9c3', color:'#854d0e' },
-  em_triagem:         { label:'Em triagem',      bg:'#dbeafe', color:'#1d4ed8' },
-  aguardando_medico:  { label:'Aguard. medico',  bg:'#fef3c7', color:'#92400e' },
-  em_atendimento:     { label:'Em atendimento',  bg:'#dcfce7', color:'#166534' },
-  finalizado:         { label:'Finalizado',      bg:'#f0fdf4', color:'#15803d' },
+const STATUS_CFG: Record<string, { label: string; cls: string }> = {
+  aguardando_triagem: { label: 'Aguard. triagem', cls: 'badge-yellow' },
+  em_triagem: { label: 'Em triagem', cls: 'badge-blue' },
+  aguardando_medico: { label: 'Aguard. médico', cls: 'badge-orange' },
+  em_atendimento: { label: 'Em atendimento', cls: 'badge-green' },
+  finalizado: { label: 'Finalizado', cls: 'badge-green' },
 }
 
-const PROX_STATUS: Record<string,string> = {
+const PROX_STATUS: Record<string, string> = {
   aguardando_triagem: 'em_triagem',
-  em_triagem:         'aguardando_medico',
-  aguardando_medico:  'em_atendimento',
-  em_atendimento:     'finalizado',
+  em_triagem: 'aguardando_medico',
+  aguardando_medico: 'em_atendimento',
+  em_atendimento: 'finalizado',
 }
 
-// ============================================
-// FUNÇÃO PARA BUSCAR PACIENTE NO CADSUS
-// ============================================
+// ── Busca de paciente no CadSUS (RNDS/DataSUS com fallback local) ──
 async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promise<any | null> {
   if (!termo || termo.length < (tipo === 'cpf' ? 11 : 3)) return null
-  
+
   if (tipo === 'cpf') {
     const cpfNumerico = termo.replace(/\D/g, '')
     if (cpfNumerico.length !== 11) return null
-    
     try {
-      // Opção 1: API oficial do CadSUS via RNDS
       const response = await fetch(
         `https://rnds.saude.gov.br/fhir/Patient?identifier=CPF|${cpfNumerico}`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/fhir+json',
-          }
-        }
+        { method: 'GET', headers: { Accept: 'application/fhir+json' } }
       )
-      
       if (response.ok) {
         const data = await response.json()
         if (data.entry && data.entry.length > 0) {
@@ -67,26 +63,16 @@ async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promis
       console.error('Erro ao buscar no CadSUS via RNDS:', error)
     }
   } else {
-    // Busca por NOME
     try {
       const nomeEncoded = encodeURIComponent(termo)
-      
-      // Opção 1: Busca por nome no RNDS
       const response = await fetch(
         `https://rnds.saude.gov.br/fhir/Patient?name=${nomeEncoded}&_count=10`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/fhir+json',
-          }
-        }
+        { method: 'GET', headers: { Accept: 'application/fhir+json' } }
       )
-      
       if (response.ok) {
         const data = await response.json()
         if (data.entry && data.entry.length > 0) {
-          // Retorna lista de pacientes encontrados
-          const pacientes = data.entry.map((entry: any) => {
+          return data.entry.map((entry: any) => {
             const patient = entry.resource
             return {
               nome: patient.name?.[0]?.text || patient.name?.[0]?.given?.join(' ') + ' ' + (patient.name?.[0]?.family || ''),
@@ -99,25 +85,18 @@ async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promis
               endereco: patient.address?.[0]?.line?.[0] || '',
             }
           })
-          return pacientes
         }
       }
     } catch (error) {
       console.error('Erro na busca por nome no RNDS:', error)
     }
-    
-    // Opção 2: API DataSUS por nome
+
     try {
       const nomeEncoded = encodeURIComponent(termo)
       const response = await fetch(
         `https://apisus.saude.gov.br/cadsus/api/paciente/nome/${nomeEncoded}`,
-        {
-          headers: {
-            'Accept': 'application/json',
-          }
-        }
+        { headers: { Accept: 'application/json' } }
       )
-      
       if (response.ok) {
         const data = await response.json()
         if (data && data.length > 0) {
@@ -137,109 +116,59 @@ async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promis
       console.error('Erro na busca por nome no DataSUS:', error)
     }
   }
-  
-  // Mock para desenvolvimento/teste (remover em produção)
+
+  // Mock para desenvolvimento/teste
   if (process.env.NODE_ENV === 'development') {
     const mockCadSUS: Record<string, any> = {
-      '12345678901': {
-        nome: 'João Silva Santos',
-        dataNascimento: '1985-03-15',
-        sexo: 'M',
-        municipio: 'São Paulo',
-        cns: '123456789012345',
-        telefone: '(11) 98765-4321',
-        endereco: 'Rua das Flores, 123'
-      },
-      '98765432109': {
-        nome: 'Maria Oliveira Souza',
-        dataNascimento: '1990-07-22',
-        sexo: 'F',
-        municipio: 'Rio de Janeiro',
-        cns: '987654321098765',
-        telefone: '(21) 91234-5678',
-        endereco: 'Av. Atlântica, 500'
-      },
-      '11122233344': {
-        nome: 'Pedro Costa Lima',
-        dataNascimento: '1978-11-30',
-        sexo: 'M',
-        municipio: 'Belo Horizonte',
-        cns: '111222333444555',
-        telefone: '(31) 99876-5432',
-        endereco: 'Rua da Bahia, 789'
-      },
-      'Ana Rodrigues': {
-        nome: 'Ana Rodrigues Silva',
-        dataNascimento: '1992-05-18',
-        sexo: 'F',
-        municipio: 'Curitiba',
-        cns: '555444333222111',
-        telefone: '(41) 98765-4321',
-        endereco: 'Rua XV de Novembro, 200'
-      },
-      'Carlos Alberto': {
-        nome: 'Carlos Alberto Mendes',
-        dataNascimento: '1980-12-10',
-        sexo: 'M',
-        municipio: 'Porto Alegre',
-        cns: '999888777666555',
-        telefone: '(51) 99876-5432',
-        endereco: 'Av. Protásio Alves, 1000'
-      }
+      '12345678901': { nome: 'João Silva Santos', dataNascimento: '1985-03-15', sexo: 'M', municipio: 'São Paulo', cns: '123456789012345', telefone: '(11) 98765-4321', endereco: 'Rua das Flores, 123' },
+      '98765432109': { nome: 'Maria Oliveira Souza', dataNascimento: '1990-07-22', sexo: 'F', municipio: 'Rio de Janeiro', cns: '987654321098765', telefone: '(21) 91234-5678', endereco: 'Av. Atlântica, 500' },
+      '11122233344': { nome: 'Pedro Costa Lima', dataNascimento: '1978-11-30', sexo: 'M', municipio: 'Belo Horizonte', cns: '111222333444555', telefone: '(31) 99876-5432', endereco: 'Rua da Bahia, 789' },
+      'Ana Rodrigues': { nome: 'Ana Rodrigues Silva', dataNascimento: '1992-05-18', sexo: 'F', municipio: 'Curitiba', cns: '555444333222111', telefone: '(41) 98765-4321', endereco: 'Rua XV de Novembro, 200' },
+      'Carlos Alberto': { nome: 'Carlos Alberto Mendes', dataNascimento: '1980-12-10', sexo: 'M', municipio: 'Porto Alegre', cns: '999888777666555', telefone: '(51) 99876-5432', endereco: 'Av. Protásio Alves, 1000' },
     }
-    
     if (tipo === 'cpf') {
       const mockData = mockCadSUS[termo]
-      if (mockData) {
-        return { ...mockData, cpf: termo }
-      }
+      if (mockData) return { ...mockData, cpf: termo }
     } else {
-      // Busca por nome (case insensitive)
       const termoLower = termo.toLowerCase()
       const resultados = Object.entries(mockCadSUS)
-        .filter(([key, value]) => 
-          key.toLowerCase().includes(termoLower) || 
-          value.nome.toLowerCase().includes(termoLower)
-        )
+        .filter(([key, value]) => key.toLowerCase().includes(termoLower) || value.nome.toLowerCase().includes(termoLower))
         .map(([key, value]) => ({ ...value, cpf: key.length === 11 ? key : '' }))
-      
       return resultados.length > 0 ? resultados : null
     }
   }
-  
+
   return null
 }
 
+const FORM_VAZIO = { nome: '', cpf: '', nascimento: '', sexo: 'M', municipio: '', especialidade: '', cns: '', telefone: '', endereco: '' }
+
 export default function RecepcaoPage() {
   const router = useRouter()
-  const [usuario, setUsuario] = useState<any>(null)
-  const [aba, setAba]         = useState<'fila'|'cadastro'|'painel'>('fila')
-  const [fila, setFila]       = useState(FILA_DEMO)
-  const [form, setForm]       = useState({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'', cns:'', telefone:'', endereco:'' })
+  const usuario = useUsuario()
+  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel'>('fila')
+  const [fila, setFila] = useState(FILA_DEMO)
+  const [form, setForm] = useState(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
-  const [msg, setMsg]           = useState('')
-  const [sidebarAberta, setSidebar] = useState(true)
+  const [msg, setMsg] = useState('')
+  const [msgTipo, setMsgTipo] = useState<'ok' | 'busca' | 'aviso' | 'erro'>('ok')
   const [buscandoCadSUS, setBuscandoCadSUS] = useState(false)
   const [cpfEncontrado, setCpfEncontrado] = useState(false)
   const [resultadosBusca, setResultadosBusca] = useState<any[]>([])
   const [mostrarResultados, setMostrarResultados] = useState(false)
 
   // Painel TV
-  const [chamadaAtual, setChamadaAtual]   = useState<any>(null)
-  const [historico, setHistorico]         = useState<any[]>([])
-  const [hora, setHora]                   = useState('')
-  const [pisc, setPisc]                   = useState(false)
-  const [autoMode, setAutoMode]           = useState(false)
+  const [chamadaAtual, setChamadaAtual] = useState<any>(null)
+  const [historico, setHistorico] = useState<any[]>([])
+  const [hora, setHora] = useState('')
+  const [pisc, setPisc] = useState(false)
+  const [autoMode, setAutoMode] = useState(false)
 
   useEffect(() => {
-    const u = localStorage.getItem('usuario')
-    if (!u) { router.replace('/login'); return }
-    setUsuario(JSON.parse(u))
-    
     if (!localStorage.getItem('pacientes_triagem')) {
       localStorage.setItem('pacientes_triagem', JSON.stringify([]))
     }
-  }, [router])
+  }, [])
 
   useEffect(() => {
     const t = setInterval(() => setHora(new Date().toLocaleTimeString('pt-BR')), 1000)
@@ -248,28 +177,29 @@ export default function RecepcaoPage() {
 
   useEffect(() => {
     if (!autoMode) return
-    const aguardando = fila.filter(f => f.status === 'aguardando_triagem' || f.status === 'aguardando_medico')
-    if (aguardando.length === 0) return
-    const t = setInterval(() => {
-      chamarPaciente(aguardando[0])
-    }, 12000)
+    const aguardandoFila = fila.filter((f) => f.status === 'aguardando_triagem' || f.status === 'aguardando_medico')
+    if (aguardandoFila.length === 0) return
+    const t = setInterval(() => chamarPaciente(aguardandoFila[0]), 12000)
     return () => clearInterval(t)
   }, [autoMode, fila])
 
   if (!usuario) return null
 
-  // Função para buscar no CadSUS por CPF
+  function avisar(texto: string, tipo: 'ok' | 'busca' | 'aviso' | 'erro' = 'ok', ms = 3000) {
+    setMsg(texto)
+    setMsgTipo(tipo)
+    if (ms) setTimeout(() => setMsg(''), ms)
+  }
+
   const buscarPorCPF = async (cpf: string) => {
     const cpfLimpo = cpf.replace(/\D/g, '')
     if (cpfLimpo.length !== 11) return null
-    
     setBuscandoCadSUS(true)
-    setMsg('🔍 Buscando paciente no CadSUS por CPF...')
-    
+    avisar('Buscando paciente no CadSUS por CPF...', 'busca', 0)
     try {
       const paciente = await buscarPacienteCadSUS(cpfLimpo, 'cpf')
       if (paciente) {
-        setForm(f => ({
+        setForm((f) => ({
           ...f,
           nome: paciente.nome,
           nascimento: paciente.dataNascimento,
@@ -278,91 +208,69 @@ export default function RecepcaoPage() {
           cns: paciente.cns || '',
           telefone: paciente.telefone || '',
           endereco: paciente.endereco || '',
-          cpf: cpfLimpo
+          cpf: cpfLimpo,
         }))
         setCpfEncontrado(true)
         setMostrarResultados(false)
-        setMsg(`✅ Paciente encontrado no CadSUS: ${paciente.nome}`)
-        setTimeout(() => setMsg(''), 3000)
+        avisar(`Paciente encontrado no CadSUS: ${paciente.nome}`, 'ok')
         return paciente
-      } else {
-        setMsg('⚠️ CPF não encontrado no CadSUS. Preencha os dados manualmente.')
-        setTimeout(() => setMsg(''), 3000)
-        return null
       }
+      avisar('CPF não encontrado no CadSUS. Preencha os dados manualmente.', 'aviso')
+      return null
     } catch (error) {
       console.error('Erro na busca do CadSUS:', error)
-      setMsg('❌ Erro ao consultar CadSUS. Preencha os dados manualmente.')
-      setTimeout(() => setMsg(''), 3000)
+      avisar('Erro ao consultar CadSUS. Preencha os dados manualmente.', 'erro')
       return null
     } finally {
       setBuscandoCadSUS(false)
     }
   }
 
-  // Função para buscar no CadSUS por NOME
   const buscarPorNome = async (nome: string) => {
     if (nome.length < 3) return
-    
     setBuscandoCadSUS(true)
-    setMsg('🔍 Buscando pacientes no CadSUS...')
-    
+    avisar('Buscando pacientes no CadSUS...', 'busca', 0)
     try {
       const resultados = await buscarPacienteCadSUS(nome, 'nome')
-      
       if (resultados && resultados.length > 0) {
         setResultadosBusca(resultados)
         setMostrarResultados(true)
-        setMsg(`🔍 Encontrados ${resultados.length} paciente(s) no CadSUS. Selecione um abaixo.`)
-        setTimeout(() => setMsg(''), 3000)
+        avisar(`Encontrados ${resultados.length} paciente(s) no CadSUS. Selecione um abaixo.`, 'busca')
       } else {
         setResultadosBusca([])
         setMostrarResultados(false)
-        setMsg('⚠️ Nenhum paciente encontrado no CadSUS. Preencha os dados manualmente.')
-        setTimeout(() => setMsg(''), 3000)
+        avisar('Nenhum paciente encontrado no CadSUS. Preencha os dados manualmente.', 'aviso')
       }
     } catch (error) {
       console.error('Erro na busca por nome:', error)
       setResultadosBusca([])
       setMostrarResultados(false)
-      setMsg('❌ Erro ao consultar CadSUS. Preencha os dados manualmente.')
-      setTimeout(() => setMsg(''), 3000)
+      avisar('Erro ao consultar CadSUS. Preencha os dados manualmente.', 'erro')
     } finally {
       setBuscandoCadSUS(false)
     }
   }
 
-  // Handler para mudança no CPF
-  const handleCpfChange = async (cpf: string) => {
-    setForm(f => ({ ...f, cpf }))
+  const handleCpfChange = (cpf: string) => {
+    setForm((f) => ({ ...f, cpf }))
     setCpfEncontrado(false)
-    
     if ((window as any).cpfTimeout) clearTimeout((window as any).cpfTimeout)
-    
-    (window as any).cpfTimeout = setTimeout(async () => {
+    ;(window as any).cpfTimeout = setTimeout(async () => {
       const cpfLimpo = cpf.replace(/\D/g, '')
-      if (cpfLimpo.length === 11) {
-        await buscarPorCPF(cpf)
-      }
+      if (cpfLimpo.length === 11) await buscarPorCPF(cpf)
     }, 500)
   }
 
-  // Handler para mudança no NOME
-  const handleNomeChange = async (nome: string) => {
-    setForm(f => ({ ...f, nome }))
+  const handleNomeChange = (nome: string) => {
+    setForm((f) => ({ ...f, nome }))
     setCpfEncontrado(false)
     setMostrarResultados(false)
-    
     if ((window as any).nomeTimeout) clearTimeout((window as any).nomeTimeout)
-    
-    (window as any).nomeTimeout = setTimeout(async () => {
-      if (nome.length >= 3) {
-        await buscarPorNome(nome)
-      }
+    ;(window as any).nomeTimeout = setTimeout(async () => {
+      if (nome.length >= 3) await buscarPorNome(nome)
     }, 500)
   }
 
-  // Selecionar paciente da lista de resultados
   const selecionarPacienteResultado = (paciente: any) => {
     setForm({
       nome: paciente.nome,
@@ -378,26 +286,19 @@ export default function RecepcaoPage() {
     setCpfEncontrado(true)
     setMostrarResultados(false)
     setResultadosBusca([])
-    setMsg(`✅ Paciente "${paciente.nome}" selecionado do CadSUS!`)
-    setTimeout(() => setMsg(''), 3000)
+    avisar(`Paciente "${paciente.nome}" selecionado do CadSUS.`, 'ok')
   }
 
-  const aguardando  = fila.filter(f => ['aguardando_triagem','aguardando_medico'].includes(f.status)).length
-  const atendimento = fila.filter(f => f.status === 'em_atendimento').length
-  const triagem     = fila.filter(f => f.status === 'em_triagem').length
-  const finalizados = fila.filter(f => f.status === 'finalizado').length
+  const aguardando = fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status)).length
+  const atendimento = fila.filter((f) => f.status === 'em_atendimento').length
+  const triagem = fila.filter((f) => f.status === 'em_triagem').length
+  const finalizados = fila.filter((f) => f.status === 'finalizado').length
 
   function avancarStatus(id: string) {
-    const paciente = fila.find(f => f.id === id)
+    const paciente = fila.find((f) => f.id === id)
     const novoStatus = PROX_STATUS[paciente?.status || '']
-    
-    setFila(f => f.map(item =>
-      item.id === id ? { ...item, status: novoStatus || item.status } : item
-    ))
-
-    if (paciente && novoStatus === 'em_triagem') {
-      enviarParaTriagemStorage(paciente)
-    }
+    setFila((f) => f.map((item) => (item.id === id ? { ...item, status: novoStatus || item.status } : item)))
+    if (paciente && novoStatus === 'em_triagem') enviarParaTriagemStorage(paciente)
   }
 
   const enviarParaTriagemStorage = (paciente: any) => {
@@ -412,28 +313,20 @@ export default function RecepcaoPage() {
       sinais_vitais: null,
       queixa: '',
       risco: null,
-      dados_triagem: null
+      dados_triagem: null,
     }
-    
     const triagemPacientes = JSON.parse(localStorage.getItem('pacientes_triagem') || '[]')
-    
     const existe = triagemPacientes.some((p: any) => p.id === paciente.id)
     if (!existe) {
       triagemPacientes.push(pacienteParaTriagem)
       localStorage.setItem('pacientes_triagem', JSON.stringify(triagemPacientes))
-      console.log('Paciente enviado para triagem:', paciente.nome)
-      setMsg(`✅ Paciente ${paciente.nome} enviado para triagem!`)
-      setTimeout(() => setMsg(''), 3000)
+      avisar(`Paciente ${paciente.nome} enviado para triagem.`, 'ok')
     }
   }
 
   function enviarParaTriagem(paciente: any) {
-    setFila(f => f.map(item =>
-      item.id === paciente.id ? { ...item, status: 'em_triagem' } : item
-    ))
-
+    setFila((f) => f.map((item) => (item.id === paciente.id ? { ...item, status: 'em_triagem' } : item)))
     enviarParaTriagemStorage(paciente)
-    
     setTimeout(() => {
       if (confirm(`Paciente ${paciente.nome} foi encaminhado para triagem. Deseja abrir a tela de triagem agora?`)) {
         router.push('/triagem')
@@ -443,7 +336,7 @@ export default function RecepcaoPage() {
 
   function chamarPaciente(paciente: any) {
     setChamadaAtual(paciente)
-    setHistorico(h => [paciente, ...h].slice(0, 5))
+    setHistorico((h) => [paciente, ...h].slice(0, 5))
     setPisc(true)
     setTimeout(() => setPisc(false), 1500)
     if (window.speechSynthesis) {
@@ -458,504 +351,378 @@ export default function RecepcaoPage() {
 
   async function salvarPaciente(e: React.FormEvent) {
     e.preventDefault()
-    
     if (!form.nome) {
-      setMsg('❌ Nome do paciente é obrigatório!')
-      setTimeout(() => setMsg(''), 3000)
+      avisar('Nome do paciente é obrigatório.', 'erro')
       return
     }
-    
     setSalvando(true)
-    await new Promise(r => setTimeout(r, 800))
-    
+    await new Promise((r) => setTimeout(r, 800))
+
     const novoId = String(Date.now())
-    const novoNum = String(20 + fila.length).padStart(3,'0')
-    
+    const novoNum = String(20 + fila.length).padStart(3, '0')
     const novoPaciente = {
-      id: novoId,
-      num: novoNum,
-      nome: form.nome,
+      id: novoId, num: novoNum, nome: form.nome,
       esp: form.especialidade || 'Clinica Medica',
-      status: 'aguardando_triagem',
-      cons: 'Aguardando sala'
+      status: 'aguardando_triagem', cons: 'Aguardando sala',
     }
-    
-    // Salvar paciente completo no localStorage
+
     const pacientesStorage = localStorage.getItem('pacientes')
     const pacientes = pacientesStorage ? JSON.parse(pacientesStorage) : []
     const existe = pacientes.find((p: any) => p.cpf === form.cpf)
-    
     if (!existe && form.cpf) {
       pacientes.push({
-        id: novoId,
-        num: novoNum,
-        nome: form.nome,
-        cpf: form.cpf,
-        dataNascimento: form.nascimento,
-        sexo: form.sexo,
-        municipio: form.municipio,
-        cns: form.cns,
-        telefone: form.telefone,
-        endereco: form.endereco,
+        id: novoId, num: novoNum, nome: form.nome, cpf: form.cpf,
+        dataNascimento: form.nascimento, sexo: form.sexo, municipio: form.municipio,
+        cns: form.cns, telefone: form.telefone, endereco: form.endereco,
         criado_em: new Date().toISOString(),
-        fonte: cpfEncontrado ? 'cadsus' : 'manual'
+        fonte: cpfEncontrado ? 'cadsus' : 'manual',
       })
       localStorage.setItem('pacientes', JSON.stringify(pacientes))
     }
-    
-    setFila(f => [...f, novoPaciente])
-    setMsg(`✅ Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida. ${cpfEncontrado ? 'Dados importados do CadSUS.' : ''}`)
-    
-    setForm({ nome:'', cpf:'', nascimento:'', sexo:'M', municipio:'', especialidade:'', cns:'', telefone:'', endereco:'' })
+
+    setFila((f) => [...f, novoPaciente])
+    avisar(`Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida.${cpfEncontrado ? ' Dados importados do CadSUS.' : ''}`, 'ok')
+    setForm(FORM_VAZIO)
     setCpfEncontrado(false)
     setMostrarResultados(false)
     setResultadosBusca([])
     setSalvando(false)
-    setTimeout(() => { setMsg(''); setAba('fila') }, 3000)
+    setTimeout(() => setAba('fila'), 3000)
   }
 
-  const cor = { recepcionista:'#22c55e', enfermeiro:'#3b82f6', medico:'#ec4899', gestor:'#f59e0b' }[usuario.perfil as keyof { recepcionista: string; enfermeiro: string; medico: string; gestor: string }] || '#3ECF8E'
-  const ini    = usuario.nome.split(' ').map((n:string) => n[0]).slice(0,2).join('')
-  const inp:any = { padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:13, width:'100%', outline:'none', fontFamily:'inherit' }
-  const lbl:any = { fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4, letterSpacing:'.03em' }
+  const MSG_CLS = {
+    ok: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    busca: 'border-sky-200 bg-sky-50 text-sky-800',
+    aviso: 'border-amber-200 bg-amber-50 text-amber-800',
+    erro: 'border-rose-200 bg-rose-50 text-rose-800',
+  }
+
+  const KPIS = [
+    { label: 'Aguardando', valor: aguardando, cls: 'text-amber-500' },
+    { label: 'Em triagem', valor: triagem, cls: 'text-sky-500' },
+    { label: 'Atendimento', valor: atendimento, cls: 'text-brand-600' },
+    { label: 'Finalizados', valor: finalizados, cls: 'text-violet-500' },
+  ]
+
+  const TABS = [
+    { id: 'fila', label: 'Fila do dia', icon: ClipboardList },
+    { id: 'painel', label: 'Painel de chamadas', icon: Tv },
+    { id: 'cadastro', label: 'Novo paciente', icon: UserPlus },
+  ] as const
 
   return (
-    <div style={{ display:'flex', height:'100vh', fontFamily:"system-ui", background:'#f1f5f9' }}>
+    <AppShell usuario={usuario} title="Recepção">
+      <div className="p-5">
+        {msg && (
+          <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px] font-semibold ${MSG_CLS[msgTipo]}`}>
+            {msgTipo === 'busca' ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+            {msg}
+          </div>
+        )}
 
-      {/* SIDEBAR */}
-      <aside style={{ width: sidebarAberta ? 220 : 60, background:'#0f172a', display:'flex',
-        flexDirection:'column', transition:'width .2s', flexShrink:0 }}>
-        <div style={{ padding: sidebarAberta ? '18px 18px 14px' : '18px 10px 14px',
-          borderBottom:'1px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:32, height:32, borderRadius:8, background:'#3ECF8E', flexShrink:0,
-            display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, color:'#fff' }}>+</div>
-          {sidebarAberta && <div style={{ fontSize:13, fontWeight:600, color:'#fff', whiteSpace:'nowrap' }}>PoliclinicaMed</div>}
-        </div>
-        <nav style={{ flex:1, padding:'10px 0' }}>
-          {[{l:'Recepcao',h:'/recepcao',e:'🏠'},{l:'Triagem',h:'/triagem',e:'🩺'},{l:'Prontuario',h:'/prontuario',e:'📒'},{l:'Gestao',h:'/gestao',e:'📊'}].map(x => (
-            <div key={x.h} onClick={() => router.push(x.h)}
-              style={{ display:'flex', alignItems:'center', gap:10,
-                padding: sidebarAberta ? '9px 18px' : '9px', justifyContent: sidebarAberta ? 'flex-start' : 'center',
-                color: x.h==='/recepcao' ? '#fff' : '#64748b',
-                background: x.h==='/recepcao' ? `${cor}25` : 'transparent',
-                borderLeft: x.h==='/recepcao' ? `3px solid ${cor}` : '3px solid transparent',
-                fontSize:13, fontWeight: x.h==='/recepcao' ? 600 : 400, cursor:'pointer', transition:'all .15s' }}>
-              <span style={{ fontSize:17 }}>{x.e}</span>
-              {sidebarAberta && <span>{x.l}</span>}
+        {/* KPIs */}
+        <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {KPIS.map((k) => (
+            <div key={k.label} className="card px-5 py-4">
+              <div className="kpi-label">{k.label}</div>
+              <div className={`kpi-value ${k.cls}`}>{k.valor}</div>
             </div>
           ))}
-        </nav>
-        <div style={{ padding: sidebarAberta ? '12px 16px' : '12px 10px',
-          borderTop:'1px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:30, height:30, borderRadius:'50%', background:cor, flexShrink:0,
-            display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff' }}>{ini}</div>
-          {sidebarAberta && (
-            <>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:11, fontWeight:600, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{usuario.nome.split(' ')[0]}</div>
-                <div style={{ fontSize:9, color:'#475569', textTransform:'capitalize' }}>{usuario.perfil}</div>
-              </div>
-              <button onClick={() => { localStorage.clear(); router.push('/login') }}
-                style={{ background:'none', border:'none', color:'#475569', cursor:'pointer', fontSize:16 }}>↩</button>
-            </>
-          )}
         </div>
-      </aside>
 
-      {/* CONTEUDO */}
-      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-
-        {/* TOPBAR */}
-        <header style={{ height:52, background:'#fff', borderBottom:'1px solid #e2e8f0',
-          display:'flex', alignItems:'center', padding:'0 20px', gap:12, flexShrink:0 }}>
-          <button onClick={() => setSidebar(o => !o)}
-            style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:'#64748b' }}>☰</button>
-          <div style={{ flex:1, fontSize:14, fontWeight:700, color:'#0f172a' }}>Recepcao</div>
-          <div style={{ fontSize:11, color:'#94a3b8' }}>
-            {new Date().toLocaleDateString('pt-BR',{ weekday:'long', day:'numeric', month:'long' })}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'#3ECF8E', fontWeight:600 }}>
-            <div style={{ width:7, height:7, borderRadius:'50%', background:'#3ECF8E' }} /> Online
-          </div>
-        </header>
-
-        <main style={{ flex:1, overflowY:'auto', padding:20 }}>
-
-          {msg && (
-            <div style={{ 
-              background: msg.includes('✅') ? '#dcfce7' : msg.includes('🔍') ? '#e0f2fe' : msg.includes('⚠️') ? '#fef9c3' : '#fee2e2',
-              border: `1px solid ${msg.includes('✅') ? '#86efac' : msg.includes('🔍') ? '#bae6fd' : msg.includes('⚠️') ? '#fde047' : '#fecaca'}`,
-              borderRadius:8, padding:'10px 14px', fontSize:13, 
-              color: msg.includes('✅') ? '#166534' : msg.includes('🔍') ? '#0369a1' : msg.includes('⚠️') ? '#854d0e' : '#991b1b', 
-              fontWeight:600, marginBottom:14 
-            }}>
-              {msg}
-            </div>
-          )}
-
-          {/* KPIs */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
-            {[
-              { label:'Aguardando', valor: aguardando, cor:'#f59e0b' },
-              { label:'Em triagem',  valor: triagem,    cor:'#3b82f6' },
-              { label:'Atendimento', valor: atendimento,cor:'#3ECF8E' },
-              { label:'Finalizados', valor: finalizados, cor:'#8b5cf6' },
-            ].map((k,i) => (
-              <div key={i} style={{ background:'#fff', borderRadius:12, padding:'16px 18px', border:'1px solid #e2e8f0' }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:6, textTransform:'uppercase', letterSpacing:'.05em' }}>{k.label}</div>
-                <div style={{ fontSize:30, fontWeight:800, color:k.cor, lineHeight:1 }}>{k.valor}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* ABAS */}
-          <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden' }}>
-            <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', padding:'0 6px' }}>
-              {[
-                { id:'fila',    label:'📋 Fila do dia'        },
-                { id:'painel',  label:'📺 Painel de Chamadas' },
-                { id:'cadastro',label:'➕ Novo paciente'       },
-              ].map(tab => (
-                <button key={tab.id} onClick={() => setAba(tab.id as any)}
-                  style={{ padding:'12px 16px', fontSize:13, fontWeight:600, border:'none', background:'none', cursor:'pointer',
-                    borderBottom:'2px solid '+(aba===tab.id?cor:'transparent'),
-                    color: aba===tab.id ? cor : '#64748b', transition:'all .15s' }}>
+        {/* Abas */}
+        <div className="card overflow-hidden">
+          <div className="flex border-b border-slate-200 px-2">
+            {TABS.map((tab) => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setAba(tab.id)}
+                  className={`tab flex items-center gap-2 ${aba === tab.id ? 'tab-active' : ''}`}
+                >
+                  <Icon size={15} />
                   {tab.label}
                 </button>
-              ))}
-            </div>
+              )
+            })}
+          </div>
 
-            <div style={{ padding:20 }}>
+          <div className="p-5">
+            {/* FILA */}
+            {aba === 'fila' && (
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <button onClick={() => setFila([...FILA_DEMO])} className="btn-ghost btn-sm">
+                    <RefreshCw size={13} /> Resetar fila
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    Total: {fila.filter((f) => f.status !== 'finalizado').length} pacientes
+                  </span>
+                </div>
 
-              {/* ABA FILA - mantida igual */}
-              {aba === 'fila' && (
-                <div>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
-                    <button onClick={() => setFila([...FILA_DEMO])}
-                      style={{ padding:'6px 14px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, cursor:'pointer', color:'#64748b' }}>
-                      Resetar Fila
-                    </button>
-                    <div style={{ fontSize:12, color:'#64748b' }}>
-                      Total: {fila.filter(f => f.status !== 'finalizado').length} pacientes
-                    </div>
-                  </div>
-                  {fila.filter(f => f.status !== 'finalizado').map(f => {
+                <div className="space-y-2">
+                  {fila.filter((f) => f.status !== 'finalizado').map((f) => {
                     const cfg = STATUS_CFG[f.status] || STATUS_CFG.aguardando_triagem
-                    const podeChamar = ['aguardando_triagem','aguardando_medico'].includes(f.status)
-                    const isAguardandoTriagem = f.status === 'aguardando_triagem'
+                    const podeChamar = ['aguardando_triagem', 'aguardando_medico'].includes(f.status)
+                    const aguardandoTriagem = f.status === 'aguardando_triagem'
                     return (
-                      <div key={f.id} style={{ display:'flex', alignItems:'center', gap:12,
-                        padding:'12px 16px', background:'#f8fafc', borderRadius:10,
-                        border:'1px solid #e2e8f0', marginBottom:8 }}>
-                        <div style={{ fontSize:17, fontWeight:800, color:'#3ECF8E', fontFamily:'monospace', minWidth:42 }}>#{f.num}</div>
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontSize:14, fontWeight:700, color:'#0f172a' }}>{f.nome}</div>
-                          <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>{f.esp} · {f.cons}</div>
+                      <div key={f.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <span className="min-w-12 font-mono text-base font-extrabold text-brand-600">#{f.num}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-slate-900">{f.nome}</div>
+                          <div className="text-[11px] text-slate-400">{f.esp} · {f.cons}</div>
                         </div>
-                        <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, background:cfg.bg, color:cfg.color, whiteSpace:'nowrap' }}>
-                          {cfg.label}
-                        </span>
-                        {isAguardandoTriagem && (
-                          <button 
-                            onClick={() => enviarParaTriagem(f)}
-                            style={{ 
-                              padding:'6px 14px', 
-                              background:'#3b82f6', 
-                              color:'#fff', 
-                              border:'none', 
-                              borderRadius:8, 
-                              fontSize:12, 
-                              fontWeight:700, 
-                              cursor:'pointer', 
-                              whiteSpace:'nowrap' 
-                            }}>
-                            🩺 Enviar para Triagem
+                        <span className={cfg.cls}>{cfg.label}</span>
+                        {aguardandoTriagem && (
+                          <button onClick={() => enviarParaTriagem(f)} className="btn-info btn-sm">
+                            <Stethoscope size={13} /> Enviar p/ triagem
                           </button>
                         )}
-                        {podeChamar && !isAguardandoTriagem && (
-                          <button onClick={() => { chamarPaciente(f); setAba('painel') }}
-                            style={{ padding:'6px 14px', background:'#185FA5', color:'#fff', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
-                            📢 Chamar
+                        {podeChamar && !aguardandoTriagem && (
+                          <button onClick={() => { chamarPaciente(f); setAba('painel') }} className="btn-info btn-sm">
+                            <Megaphone size={13} /> Chamar
                           </button>
                         )}
-                        <button onClick={() => avancarStatus(f.id)}
-                          style={{ padding:'6px 12px', background:'#3ECF8E', color:'#fff', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
-                          Avancar →
+                        <button onClick={() => avancarStatus(f.id)} className="btn-primary btn-sm">
+                          Avançar <ArrowRight size={13} />
                         </button>
                       </div>
                     )
                   })}
-                  {fila.filter(f => f.status !== 'finalizado').length === 0 && (
-                    <div style={{ textAlign:'center', padding:40, color:'#94a3b8' }}>
-                      <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
-                      <div style={{ fontSize:14, fontWeight:600 }}>Fila vazia! Todos atendidos.</div>
-                    </div>
-                  )}
                 </div>
-              )}
 
-              {/* ABA PAINEL - mantida igual */}
-              {aba === 'painel' && (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:16 }}>
+                {fila.filter((f) => f.status !== 'finalizado').length === 0 && (
+                  <div className="py-12 text-center text-slate-400">
+                    <CheckCircle2 size={36} className="mx-auto mb-2 text-emerald-400" />
+                    <div className="text-sm font-semibold">Fila vazia! Todos atendidos.</div>
+                  </div>
+                )}
+              </div>
+            )}
 
-                  {/* Chamada atual */}
-                  <div>
-                    <div style={{ background: pisc?'#0d2548':'#0d1e3a', border:`2px solid ${pisc?'#3ECF8E':'#1e3d6e'}`,
-                      borderRadius:14, padding:'24px 28px', marginBottom:16, transition:'all .3s' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
-                        <div style={{ width:10, height:10, borderRadius:'50%', background:'#3ECF8E' }} />
-                        <span style={{ fontSize:11, fontWeight:700, color:'#3ECF8E', letterSpacing:'.1em', textTransform:'uppercase' }}>
-                          {chamadaAtual ? 'Chamando agora' : 'Aguardando chamada'}
-                        </span>
-                        <span style={{ marginLeft:'auto', fontSize:14, fontWeight:700, color:'#fff', fontFamily:'monospace' }}>{hora}</span>
-                      </div>
-                      {chamadaAtual ? (
-                        <>
-                          <div style={{ fontSize:72, fontWeight:800, color:'#fff', lineHeight:1, fontFamily:'monospace' }}>#{chamadaAtual.num}</div>
-                          <div style={{ fontSize:26, fontWeight:700, color:'#fff', marginTop:10 }}>{chamadaAtual.nome}</div>
-                          <div style={{ fontSize:16, color:'#3ECF8E', marginTop:6 }}>📍 {chamadaAtual.cons} — {chamadaAtual.esp}</div>
-                        </>
-                      ) : (
-                        <div style={{ fontSize:18, color:'#4a6a8a', marginTop:10 }}>Clique em "Chamar" em um paciente da fila</div>
-                      )}
+            {/* PAINEL */}
+            {aba === 'painel' && (
+              <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+                <div>
+                  <div
+                    className={`mb-4 rounded-2xl border-2 p-6 transition-all duration-300 ${
+                      pisc ? 'border-brand-400 bg-navy-800' : 'border-navy-800 bg-navy-900'
+                    }`}
+                  >
+                    <div className="mb-4 flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-brand-400" />
+                      <span className="text-[11px] font-bold tracking-widest text-brand-400 uppercase">
+                        {chamadaAtual ? 'Chamando agora' : 'Aguardando chamada'}
+                      </span>
+                      <span className="ml-auto font-mono text-sm font-bold text-white">{hora}</span>
                     </div>
-
-                    {/* Proximos na fila */}
-                    <div style={{ fontSize:12, fontWeight:700, color:'#64748b', marginBottom:10, textTransform:'uppercase', letterSpacing:'.05em' }}>
-                      Proximos na fila
-                    </div>
-                    {fila.filter(f => ['aguardando_triagem','aguardando_medico'].includes(f.status)).map((f, i) => (
-                      <div key={f.id} style={{ display:'grid', gridTemplateColumns:'60px 1fr auto', gap:12, alignItems:'center',
-                        background: i===0?'#f0f9ff':'#f8fafc', border:`1px solid ${i===0?'#bae6fd':'#e2e8f0'}`,
-                        borderRadius:10, padding:'10px 14px', marginBottom:8 }}>
-                        <div style={{ fontSize:18, fontWeight:800, color:'#3ECF8E', fontFamily:'monospace' }}>#{f.num}</div>
-                        <div>
-                          <div style={{ fontSize:13, fontWeight:600, color:'#0f172a' }}>{f.nome}</div>
-                          <div style={{ fontSize:11, color:'#94a3b8' }}>{f.esp} · {f.cons}</div>
+                    {chamadaAtual ? (
+                      <>
+                        <div className="font-mono text-7xl leading-none font-extrabold text-white">#{chamadaAtual.num}</div>
+                        <div className="mt-3 text-2xl font-bold text-white">{chamadaAtual.nome}</div>
+                        <div className="mt-1.5 flex items-center gap-1.5 text-brand-400">
+                          <MapPin size={16} /> {chamadaAtual.cons} — {chamadaAtual.esp}
                         </div>
-                        <button onClick={() => chamarPaciente(f)}
-                          style={{ padding:'6px 14px', background:'#185FA5', color:'#fff', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                          📢 Chamar
+                      </>
+                    ) : (
+                      <div className="py-4 text-lg text-slate-500">Clique em &quot;Chamar&quot; em um paciente da fila</div>
+                    )}
+                  </div>
+
+                  <div className="kpi-label">Próximos na fila</div>
+                  <div className="mt-2 space-y-2">
+                    {fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status)).map((f, i) => (
+                      <div
+                        key={f.id}
+                        className={`grid grid-cols-[60px_1fr_auto] items-center gap-3 rounded-xl border px-3.5 py-2.5 ${
+                          i === 0 ? 'border-sky-200 bg-sky-50' : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <span className="font-mono text-lg font-extrabold text-brand-600">#{f.num}</span>
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-semibold text-slate-900">{f.nome}</div>
+                          <div className="text-[11px] text-slate-400">{f.esp} · {f.cons}</div>
+                        </div>
+                        <button onClick={() => chamarPaciente(f)} className="btn-info btn-sm">
+                          <Megaphone size={13} /> Chamar
                         </button>
                       </div>
                     ))}
                   </div>
+                </div>
 
-                  {/* Painel lateral direito */}
-                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                {/* Lateral */}
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-navy-900 p-4">
+                    <div className="mb-3 text-[11px] font-bold tracking-widest text-slate-500 uppercase">Controles</div>
+                    <button
+                      onClick={() => {
+                        const aguard = fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status))
+                        if (aguard.length > 0) chamarPaciente(aguard[0])
+                      }}
+                      className="btn-info mb-2 w-full"
+                    >
+                      <Megaphone size={15} /> Chamar próximo
+                    </button>
+                    <button
+                      onClick={() => setAutoMode((a) => !a)}
+                      className={`btn w-full text-white ${autoMode ? 'bg-brand-700 hover:bg-brand-800' : 'bg-navy-800 hover:bg-navy-800/80'}`}
+                    >
+                      Auto: {autoMode ? 'Ligado' : 'Desligado'}
+                    </button>
+                    {autoMode && (
+                      <div className="mt-2 text-center text-[10px] text-slate-500">Chamando automaticamente a cada 12s</div>
+                    )}
+                  </div>
 
-                    {/* Controles */}
-                    <div style={{ background:'#0f172a', borderRadius:12, padding:16 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#4a6a8a', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:10 }}>Controles</div>
-                      <button onClick={() => {
-                          const aguard = fila.filter(f => ['aguardando_triagem','aguardando_medico'].includes(f.status))
-                          if (aguard.length > 0) chamarPaciente(aguard[0])
-                        }}
-                        style={{ width:'100%', padding:'10px', background:'#185FA5', color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', marginBottom:8 }}>
-                        📢 Chamar proximo
-                      </button>
-                      <button onClick={() => setAutoMode(a => !a)}
-                        style={{ width:'100%', padding:'10px', background:autoMode?'#0F6E56':'#1a2540', color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer' }}>
-                        Auto: {autoMode?'Ligado ✓':'Desligado'}
-                      </button>
-                      {autoMode && <div style={{ fontSize:10, color:'#4a6a8a', textAlign:'center', marginTop:6 }}>Chamando automaticamente a cada 12s</div>}
+                  <div className="rounded-xl bg-navy-900 p-4">
+                    <div className="mb-3 text-[11px] font-bold tracking-widest text-slate-500 uppercase">Indicadores</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { l: 'Aguardando', v: aguardando },
+                        { l: 'Atendimento', v: atendimento },
+                        { l: 'Finalizados', v: finalizados },
+                        { l: 'Total', v: fila.length },
+                      ].map((k) => (
+                        <div key={k.l} className="rounded-lg border border-white/10 bg-navy-950 px-3 py-2.5">
+                          <div className="mb-1 text-[9px] text-slate-500">{k.l}</div>
+                          <div className="text-xl font-bold text-white">{k.v}</div>
+                        </div>
+                      ))}
                     </div>
+                  </div>
 
-                    {/* Indicadores */}
-                    <div style={{ background:'#0f172a', borderRadius:12, padding:16 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#4a6a8a', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:10 }}>Indicadores</div>
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                        {[{l:'Aguardando',v:aguardando},{l:'Atendimento',v:atendimento},{l:'Finalizados',v:finalizados},{l:'Total',v:fila.length}].map(k=>(
-                          <div key={k.l} style={{ background:'#0d1428', borderRadius:8, padding:'10px 12px', border:'1px solid #1a2540' }}>
-                            <div style={{ fontSize:9, color:'#4a6a8a', marginBottom:4 }}>{k.l}</div>
-                            <div style={{ fontSize:20, fontWeight:700, color:'#fff' }}>{k.v}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Historico */}
-                    <div style={{ background:'#0f172a', borderRadius:12, padding:16 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#4a6a8a', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:10 }}>Ultimas chamadas</div>
-                      {historico.length === 0 && <div style={{ fontSize:12, color:'#4a6a8a', textAlign:'center', padding:10 }}>Nenhuma ainda</div>}
+                  <div className="rounded-xl bg-navy-900 p-4">
+                    <div className="mb-3 text-[11px] font-bold tracking-widest text-slate-500 uppercase">Últimas chamadas</div>
+                    {historico.length === 0 && (
+                      <div className="py-2 text-center text-xs text-slate-500">Nenhuma ainda</div>
+                    )}
+                    <div className="space-y-1.5">
                       {historico.map((p, i) => (
-                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 10px', background:'#0d1428', borderRadius:6, border:'1px solid #1a2540', marginBottom:6 }}>
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-white/10 bg-navy-950 px-2.5 py-1.5">
                           <div>
-                            <div style={{ fontSize:12, fontWeight:600, color:'#5DCAA5', fontFamily:'monospace' }}>#{p.num}</div>
-                            <div style={{ fontSize:10, color:'#7a9cc4' }}>{p.nome.split(' ')[0]}</div>
+                            <div className="font-mono text-xs font-semibold text-brand-300">#{p.num}</div>
+                            <div className="text-[10px] text-slate-400">{p.nome.split(' ')[0]}</div>
                           </div>
-                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6, background:'#0F6E56', color:'#9FE1CB' }}>Chamado</span>
+                          <span className="rounded-md bg-brand-800 px-2 py-0.5 text-[10px] font-bold text-brand-200">Chamado</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* ABA CADASTRO - COM BUSCA POR NOME E CPF */}
-              {aba === 'cadastro' && (
-                <div>
-                  <form onSubmit={salvarPaciente}>
-                    {/* Destaque para busca no CadSUS */}
-                    <div style={{ 
-                      background: '#e8f4fd', 
-                      borderRadius: 10, 
-                      padding: '12px 16px', 
-                      marginBottom: 16,
-                      border: '1px solid #b3d9f5'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 20 }}>🔍</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#075985', marginBottom: 2 }}>
-                            Busca automática no CadSUS
-                          </div>
-                          <div style={{ fontSize: 10, color: '#0369a1' }}>
-                            Digite o NOME ou CPF e os dados serão preenchidos automaticamente
-                          </div>
-                        </div>
-                        {buscandoCadSUS && (
-                          <div style={{ fontSize: 12, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span>⏳</span> Buscando...
-                          </div>
-                        )}
-                        {cpfEncontrado && (
-                          <div style={{ fontSize: 12, color: '#059669', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span>✅</span> CadSUS
-                          </div>
-                        )}
-                      </div>
+            {/* CADASTRO */}
+            {aba === 'cadastro' && (
+              <form onSubmit={salvarPaciente}>
+                <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+                  <Search size={18} className="shrink-0 text-sky-700" />
+                  <div className="flex-1">
+                    <div className="text-xs font-bold text-sky-900">Busca automática no CadSUS</div>
+                    <div className="text-[11px] text-sky-700">
+                      Digite o nome ou CPF e os dados serão preenchidos automaticamente
                     </div>
-
-                    {/* Lista de resultados da busca por nome */}
-                    {mostrarResultados && resultadosBusca.length > 0 && (
-                      <div style={{ 
-                        marginBottom: 16, 
-                        border: '1px solid #e2e8f0', 
-                        borderRadius: 10, 
-                        overflow: 'hidden',
-                        background: '#fff'
-                      }}>
-                        <div style={{ 
-                          background: '#f1f5f9', 
-                          padding: '8px 12px', 
-                          fontSize: 12, 
-                          fontWeight: 700, 
-                          color: '#0f172a',
-                          borderBottom: '1px solid #e2e8f0'
-                        }}>
-                          📋 Selecione um paciente encontrado no CadSUS:
-                        </div>
-                        {resultadosBusca.map((paciente, idx) => (
-                          <div 
-                            key={idx}
-                            onClick={() => selecionarPacienteResultado(paciente)}
-                            style={{
-                              padding: '12px 16px',
-                              cursor: 'pointer',
-                              borderBottom: idx < resultadosBusca.length - 1 ? '1px solid #f1f5f9' : 'none',
-                              transition: 'background 0.1s',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center'
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0fdf4')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
-                          >
-                            <div>
-                              <div style={{ fontWeight: 700, color: '#0f172a' }}>{paciente.nome}</div>
-                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                                {paciente.cpf && `CPF: ${paciente.cpf} · `}
-                                {paciente.municipio && `${paciente.municipio}`}
-                              </div>
-                            </div>
-                            <button style={{
-                              padding: '4px 12px',
-                              background: '#3ECF8E',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: 6,
-                              fontSize: 11,
-                              cursor: 'pointer'
-                            }}>
-                              Selecionar
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                      <div style={{ gridColumn:'span 2' }}>
-                        <label style={lbl}>Nome completo *</label>
-                        <input 
-                          style={inp} 
-                          value={form.nome} 
-                          onChange={e => handleNomeChange(e.target.value)} 
-                          required 
-                          placeholder="Digite o nome para buscar no CadSUS"
-                        />
-                      </div>
-                      <div>
-                        <label style={lbl}>CPF</label>
-                        <input 
-                          style={{...inp, borderColor: cpfEncontrado ? '#10b981' : '#e2e8f0'}} 
-                          value={form.cpf} 
-                          onChange={e => handleCpfChange(e.target.value)} 
-                          placeholder="000.000.000-00"
-                        />
-                      </div>
-                      <div>
-                        <label style={lbl}>Data de nascimento *</label>
-                        <input style={inp} type="date" value={form.nascimento} onChange={e=>setForm(f=>({...f,nascimento:e.target.value}))} required />
-                      </div>
-                      <div>
-                        <label style={lbl}>Sexo</label>
-                        <select style={inp} value={form.sexo} onChange={e=>setForm(f=>({...f,sexo:e.target.value}))}>
-                          <option value="M">Masculino</option>
-                          <option value="F">Feminino</option>
-                          <option value="I">Outro</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={lbl}>Município *</label>
-                        <input style={inp} value={form.municipio} onChange={e=>setForm(f=>({...f,municipio:e.target.value}))} required placeholder="Cidade" />
-                      </div>
-                      <div>
-                        <label style={lbl}>CNS (CadSUS)</label>
-                        <input style={inp} value={form.cns} onChange={e=>setForm(f=>({...f,cns:e.target.value}))} placeholder="Número do Cartão SUS" />
-                      </div>
-                      <div>
-                        <label style={lbl}>Telefone</label>
-                        <input style={inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))} placeholder="(00) 00000-0000" />
-                      </div>
-                      <div>
-                        <label style={lbl}>Endereço</label>
-                        <input style={inp} value={form.endereco} onChange={e=>setForm(f=>({...f,endereco:e.target.value}))} placeholder="Rua, número, bairro" />
-                      </div>
-                      <div style={{ gridColumn:'span 2' }}>
-                        <label style={lbl}>Especialidade</label>
-                        <select style={inp} value={form.especialidade} onChange={e=>setForm(f=>({...f,especialidade:e.target.value}))}>
-                          <option value="">Selecionar...</option>
-                          {['Clinica Medica','Cardiologia','Pediatria','Neurologia','Ginecologia','Ortopedia','Dermatologia','Psicologia','Nutricao','Fisioterapia'].map(e=>(
-                            <option key={e} value={e}>{e}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <button type="submit" disabled={salvando}
-                      style={{ width:'100%', marginTop:14, padding:'12px', background: salvando?'#94a3b8':'#3ECF8E',
-                        color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:700, cursor: salvando?'not-allowed':'pointer' }}>
-                      {salvando ? 'Cadastrando...' : 'Cadastrar e encaminhar para triagem'}
-                    </button>
-                  </form>
+                  </div>
+                  {buscandoCadSUS && (
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-sky-700">
+                      <Loader2 size={13} className="animate-spin" /> Buscando...
+                    </span>
+                  )}
+                  {cpfEncontrado && (
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 size={13} /> CadSUS
+                    </span>
+                  )}
                 </div>
-              )}
 
-            </div>
+                {mostrarResultados && resultadosBusca.length > 0 && (
+                  <div className="card mb-4 overflow-hidden">
+                    <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700">
+                      Selecione um paciente encontrado no CadSUS:
+                    </div>
+                    {resultadosBusca.map((paciente, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => selecionarPacienteResultado(paciente)}
+                        className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-brand-50"
+                      >
+                        <div>
+                          <div className="text-sm font-bold text-slate-900">{paciente.nome}</div>
+                          <div className="mt-0.5 text-[11px] text-slate-500">
+                            {paciente.cpf && `CPF: ${paciente.cpf} · `}
+                            {paciente.municipio}
+                          </div>
+                        </div>
+                        <span className="btn-primary btn-sm">Selecionar</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
+                  <div className="field md:col-span-2">
+                    <label className="label">Nome completo *</label>
+                    <input className="input" value={form.nome} onChange={(e) => handleNomeChange(e.target.value)} required placeholder="Digite o nome para buscar no CadSUS" />
+                  </div>
+                  <div className="field">
+                    <label className="label">CPF</label>
+                    <input
+                      className={`input ${cpfEncontrado ? 'border-emerald-400' : ''}`}
+                      value={form.cpf}
+                      onChange={(e) => handleCpfChange(e.target.value)}
+                      placeholder="000.000.000-00"
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="label">Data de nascimento *</label>
+                    <input className="input" type="date" value={form.nascimento} onChange={(e) => setForm((f) => ({ ...f, nascimento: e.target.value }))} required />
+                  </div>
+                  <div className="field">
+                    <label className="label">Sexo</label>
+                    <select className="input" value={form.sexo} onChange={(e) => setForm((f) => ({ ...f, sexo: e.target.value }))}>
+                      <option value="M">Masculino</option>
+                      <option value="F">Feminino</option>
+                      <option value="I">Outro</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="label">Município *</label>
+                    <input className="input" value={form.municipio} onChange={(e) => setForm((f) => ({ ...f, municipio: e.target.value }))} required placeholder="Cidade" />
+                  </div>
+                  <div className="field">
+                    <label className="label">CNS (CadSUS)</label>
+                    <input className="input" value={form.cns} onChange={(e) => setForm((f) => ({ ...f, cns: e.target.value }))} placeholder="Número do Cartão SUS" />
+                  </div>
+                  <div className="field">
+                    <label className="label">Telefone</label>
+                    <input className="input" value={form.telefone} onChange={(e) => setForm((f) => ({ ...f, telefone: e.target.value }))} placeholder="(00) 00000-0000" />
+                  </div>
+                  <div className="field">
+                    <label className="label">Endereço</label>
+                    <input className="input" value={form.endereco} onChange={(e) => setForm((f) => ({ ...f, endereco: e.target.value }))} placeholder="Rua, número, bairro" />
+                  </div>
+                  <div className="field md:col-span-2">
+                    <label className="label">Especialidade</label>
+                    <select className="input" value={form.especialidade} onChange={(e) => setForm((f) => ({ ...f, especialidade: e.target.value }))}>
+                      <option value="">Selecionar...</option>
+                      {['Clinica Medica', 'Cardiologia', 'Pediatria', 'Neurologia', 'Ginecologia', 'Ortopedia', 'Dermatologia', 'Psicologia', 'Nutricao', 'Fisioterapia'].map((e) => (
+                        <option key={e} value={e}>{e}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button type="submit" disabled={salvando} className="btn-primary mt-2 w-full py-3">
+                  {salvando ? (<><Loader2 size={16} className="animate-spin" /> Cadastrando...</>) : 'Cadastrar e encaminhar para triagem'}
+                </button>
+              </form>
+            )}
           </div>
-        </main>
+        </div>
       </div>
-    </div>
+    </AppShell>
   )
 }

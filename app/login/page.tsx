@@ -1,49 +1,30 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Monitor, Stethoscope, HeartPulse, BarChart3, Eye, EyeOff, AlertCircle, ArrowRight, type LucideIcon } from 'lucide-react'
 
-// Credenciais dos profissionais
-const PROFISSIONAIS = [
-  { 
-    id: 'recepcionista', 
-    label: 'Recepcionista', 
-    cor: '#22c55e', 
-    emoji: '🖥️',
-    usuario: 'recepcao',
-    senha: '123'
-  },
-  { 
-    id: 'enfermeiro', 
-    label: 'Enfermagem', 
-    cor: '#3b82f6', 
-    emoji: '🩺',
-    usuario: 'enfermeiro',
-    senha: '123'
-  },
-  { 
-    id: 'medico', 
-    label: 'Médico', 
-    cor: '#ec4899', 
-    emoji: '👨‍⚕️',
-    usuario: 'medico',
-    senha: '123'
-  },
-  { 
-    id: 'gestor', 
-    label: 'Gestor', 
-    cor: '#f59e0b', 
-    emoji: '📊',
-    usuario: 'gestor',
-    senha: '123'
-  }
+interface Profissional {
+  id: string
+  label: string
+  cor: string
+  icon: LucideIcon
+  usuario: string
+  senha: string
+}
+
+// Credenciais dos profissionais (demonstração — substituir por autenticação real)
+const PROFISSIONAIS: Profissional[] = [
+  { id: 'recepcionista', label: 'Recepcionista', cor: '#10b981', icon: Monitor, usuario: 'recepcao', senha: '123' },
+  { id: 'enfermeiro', label: 'Enfermagem', cor: '#0ea5e9', icon: Stethoscope, usuario: 'enfermeiro', senha: '123' },
+  { id: 'medico', label: 'Médico', cor: '#ec4899', icon: HeartPulse, usuario: 'medico', senha: '123' },
+  { id: 'gestor', label: 'Gestor', cor: '#f59e0b', icon: BarChart3, usuario: 'gestor', senha: '123' },
 ]
 
-// Rotas por perfil
-const rotasPorPerfil = {
+const rotasPorPerfil: Record<string, string> = {
   recepcionista: '/recepcao',
   enfermeiro: '/triagem',
-  medico: '/gestao',
-  gestor: '/gestao'
+  medico: '/prontuario',
+  gestor: '/gestao',
 }
 
 export default function Login() {
@@ -54,254 +35,177 @@ export default function Login() {
   const [erro, setErro] = useState('')
   const [mostrarSenha, setMostrarSenha] = useState(false)
 
-  const profissional = PROFISSIONAIS.find(x => x.id === perfilSelecionado)
-  const cor = profissional?.cor || '#3ECF8E'
+  const profissional = PROFISSIONAIS.find((x) => x.id === perfilSelecionado)
+  const cor = profissional?.cor ?? '#10b981'
 
   function fazerLogin() {
     setErro('')
-    
-    // Validar usuário e senha
     if (!usuario || !senha) {
-      setErro('Preencha usuário e senha')
+      setErro('Preencha usuário e senha.')
       return
     }
-
-    const credenciaisValidas = PROFISSIONAIS.find(
-      p => p.id === perfilSelecionado && p.usuario === usuario && p.senha === senha
+    const valido = PROFISSIONAIS.find(
+      (p) => p.id === perfilSelecionado && p.usuario === usuario && p.senha === senha
     )
-
-    if (credenciaisValidas) {
-      // Salvar dados do usuário
-      localStorage.setItem('usuario', JSON.stringify({
-        nome: profissional?.label,
-        perfil: perfilSelecionado,
-        usuario: usuario
-      }))
-      
-      // Redirecionar para a rota correta
-      const rota = rotasPorPerfil[perfilSelecionado as keyof typeof rotasPorPerfil]
-      router.replace(rota)
+    if (valido) {
+      localStorage.setItem(
+        'usuario',
+        JSON.stringify({ nome: profissional?.label, perfil: perfilSelecionado, usuario })
+      )
+      router.replace(rotasPorPerfil[perfilSelecionado] ?? '/recepcao')
     } else {
-      setErro('Usuário ou senha inválidos para este perfil')
+      setErro('Usuário ou senha inválidos para este perfil.')
     }
   }
 
-  function handleKeyPress(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') {
-      fazerLogin()
-    }
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') fazerLogin()
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui' }}>
-      {/* Lado esquerdo - Informações */}
-      <div style={{
-        flex: 1,
-        background: 'linear-gradient(135deg,#0c1424,#0f2040)',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        padding: 64
-      }}>
-        <div style={{ fontSize: 40, fontWeight: 800, color: '#fff', lineHeight: 1.2, marginBottom: 16 }}>
-          Alto Alegre do Maranhão<br />
-          <span style={{ color: '#3ECF8E' }}>Especialidades médicas</span>
-        </div>
-        <p style={{ fontSize: 14, color: '#7a9cc4', lineHeight: 1.7, maxWidth: 400 }}>
-          Prontuário eletrônico para toda a equipe de saúde. Acesso seguro e personalizado para cada profissional.
-        </p>
-        
-        {/* Informações de teste */}
-        <div style={{ 
-          marginTop: 40, 
-          padding: 16, 
-          background: 'rgba(255,255,255,0.1)', 
-          borderRadius: 12,
-          maxWidth: 400
-        }}>
-          <p style={{ fontSize: 12, color: '#7a9cc4', marginBottom: 8 }}>🔐 Credenciais de teste:</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, fontSize: 11 }}>
-            <span style={{ color: '#22c55e' }}>🖥️ Recepção:</span>
-            <span style={{ color: '#94a3b8' }}>recepcao / 123</span>
-            <span style={{ color: '#3b82f6' }}>🩺 Enfermagem:</span>
-            <span style={{ color: '#94a3b8' }}>enfermeiro / 123</span>
-            <span style={{ color: '#ec4899' }}>👨‍⚕️ Médico:</span>
-            <span style={{ color: '#94a3b8' }}>medico / 123</span>
-            <span style={{ color: '#f59e0b' }}>📊 Gestor:</span>
-            <span style={{ color: '#94a3b8' }}>gestor / 123</span>
+    <div className="flex min-h-screen">
+      {/* Painel institucional */}
+      <div className="relative hidden flex-1 flex-col justify-center overflow-hidden bg-navy-950 px-16 lg:flex">
+        <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-brand-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl" />
+
+        <div className="relative">
+          <div className="mb-10 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500 text-2xl font-extrabold text-white">
+              +
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white">PoliclínicaMed</div>
+              <div className="text-[11px] text-slate-500">Gestão Municipal de Saúde</div>
+            </div>
+          </div>
+
+          <h1 className="max-w-lg text-4xl leading-tight font-extrabold text-white">
+            Alto Alegre do Maranhão
+            <br />
+            <span className="text-brand-400">Especialidades médicas</span>
+          </h1>
+          <p className="mt-5 max-w-md text-sm leading-relaxed text-slate-400">
+            Prontuário eletrônico para toda a equipe de saúde. Acesso seguro e personalizado
+            para cada profissional — da recepção ao consultório.
+          </p>
+
+          <div className="mt-12 flex gap-8 text-slate-500">
+            {[
+              ['Recepção e fila', Monitor],
+              ['Triagem Manchester', Stethoscope],
+              ['Prontuário completo', HeartPulse],
+              ['Indicadores', BarChart3],
+            ].map(([label, Icon]) => {
+              const I = Icon as LucideIcon
+              return (
+                <div key={label as string} className="flex flex-col items-center gap-2">
+                  <I size={20} className="text-brand-500" />
+                  <span className="text-[11px]">{label as string}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
 
-      {/* Lado direito - Formulário de login */}
-      <div style={{
-        width: 420,
-        background: '#f8fafc',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 40
-      }}>
-        <div style={{ width: '100%', maxWidth: 340 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-            Entrar no sistema
-          </h2>
-          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>
+      {/* Formulário */}
+      <div className="flex w-full items-center justify-center bg-slate-50 px-6 py-10 lg:w-[440px]">
+        <div className="w-full max-w-sm">
+          <h2 className="text-xl font-extrabold text-slate-900">Entrar no sistema</h2>
+          <p className="mt-1 mb-7 text-[13px] text-slate-500">
             Escolha seu perfil e informe suas credenciais
           </p>
 
           {/* Seleção de perfil */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-            {PROFISSIONAIS.map(x => (
-              <div
-                key={x.id}
-                onClick={() => {
-                  setPerfilSelecionado(x.id)
-                  setUsuario('')
-                  setSenha('')
-                  setErro('')
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '11px 14px',
-                  borderRadius: 10,
-                  border: '2px solid ' + (perfilSelecionado === x.id ? x.cor : '#e2e8f0'),
-                  background: perfilSelecionado === x.id ? x.cor + '15' : '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                <span style={{ fontSize: 20 }}>{x.emoji}</span>
-                <span style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: perfilSelecionado === x.id ? x.cor : '#0f172a'
-                }}>
-                  {x.label}
-                </span>
-              </div>
-            ))}
+          <div className="mb-7 grid grid-cols-2 gap-2">
+            {PROFISSIONAIS.map((p) => {
+              const Icon = p.icon
+              const ativo = perfilSelecionado === p.id
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    setPerfilSelecionado(p.id)
+                    setUsuario('')
+                    setSenha('')
+                    setErro('')
+                  }}
+                  className={`flex items-center gap-2.5 rounded-xl border-2 px-3 py-3 text-left transition-all ${
+                    ativo ? 'bg-white shadow-card' : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                  style={ativo ? { borderColor: p.cor } : undefined}
+                >
+                  <Icon size={18} style={{ color: ativo ? p.cor : '#94a3b8' }} />
+                  <span
+                    className="text-[12px] font-bold"
+                    style={{ color: ativo ? p.cor : '#0f172a' }}
+                  >
+                    {p.label}
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
-          {/* Campo Usuário */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
-              Usuário
-            </label>
+          <div className="field">
+            <label className="label">Usuário</label>
             <input
               type="text"
+              className="input"
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={`Digite seu usuário (ex: ${profissional?.usuario})`}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                border: '1px solid #e2e8f0',
-                borderRadius: 10,
-                fontSize: 13,
-                outline: 'none',
-                transition: 'all 0.2s'
-              }}
-              onFocus={(e) => e.target.style.borderColor = cor}
-              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+              onKeyDown={handleKeyDown}
+              placeholder="Digite seu usuário"
+              autoComplete="username"
             />
           </div>
 
-          {/* Campo Senha */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
-              Senha
-            </label>
-            <div style={{ position: 'relative' }}>
+          <div className="field">
+            <label className="label">Senha</label>
+            <div className="relative">
               <input
                 type={mostrarSenha ? 'text' : 'password'}
+                className="input pr-11"
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder="Digite sua senha"
-                style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 10,
-                  fontSize: 13,
-                  outline: 'none',
-                  transition: 'all 0.2s'
-                }}
-                onFocus={(e) => e.target.style.borderColor = cor}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                autoComplete="current-password"
               />
               <button
                 type="button"
-                onClick={() => setMostrarSenha(!mostrarSenha)}
-                style={{
-                  position: 'absolute',
-                  right: 12,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  color: '#64748b'
-                }}
+                onClick={() => setMostrarSenha((v) => !v)}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
               >
-                {mostrarSenha ? '👁️' : '🔒'}
+                {mostrarSenha ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
             </div>
           </div>
 
-          {/* Mensagem de erro */}
           {erro && (
-            <div style={{
-              marginBottom: 16,
-              padding: '10px 14px',
-              background: '#fee2e2',
-              border: '1px solid #fecaca',
-              borderRadius: 8,
-              fontSize: 12,
-              color: '#991b1b'
-            }}>
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-800">
+              <AlertCircle size={15} className="shrink-0" />
               {erro}
             </div>
           )}
 
-          {/* Botão de login */}
           <button
             onClick={fazerLogin}
-            style={{
-              width: '100%',
-              padding: 13,
-              background: cor,
-              color: '#fff',
-              border: 'none',
-              borderRadius: 10,
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'transform 0.2s, opacity 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            className="btn w-full py-3 text-[15px] text-white transition-opacity hover:opacity-90"
+            style={{ background: cor }}
           >
-            Entrar como {profissional?.label} →
+            Entrar como {profissional?.label}
+            <ArrowRight size={17} />
           </button>
 
-          {/* Informação de demonstração */}
-          <p style={{
-            textAlign: 'center',
-            fontSize: 11,
-            color: '#94a3b8',
-            marginTop: 24,
-            paddingTop: 16,
-            borderTop: '1px solid #e2e8f0'
-          }}>
-            Sistema de Prontuário Eletrônico v1.0
+          <p className="mt-7 border-t border-slate-200 pt-4 text-center text-[11px] text-slate-400">
+            Sistema de Prontuário Eletrônico · Policlínica Municipal
           </p>
         </div>
       </div>
     </div>
   )
-  }
+}
