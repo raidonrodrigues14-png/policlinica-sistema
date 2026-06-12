@@ -49,7 +49,7 @@ const APAC_DATA = [
 const maxVal = Math.max(...ESPS.map((e) => e.val))
 
 export default function GestaoPage() {
-  const usuario = useUsuario()
+  const usuario = useUsuario(['gestor'])
   const [aba, setAba] = useState('dashboard')
 
   if (!usuario) return null

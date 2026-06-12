@@ -19,7 +19,7 @@ const TIPOS: { id: DocTipo; label: string; icon: LucideIcon; ativo: string }[] =
 
 export default function DocumentosPage() {
   const router = useRouter()
-  const usuario = useUsuario()
+  const usuario = useUsuario(['medico'])
   const printRef = useRef<HTMLDivElement>(null)
   const [tipo, setTipo] = useState<DocTipo>('receita')
 

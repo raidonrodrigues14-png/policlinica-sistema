@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   ClipboardList, Tv, UserPlus, Megaphone, Stethoscope, ArrowRight, Search,
   CheckCircle2, RefreshCw, MapPin, Loader2,
@@ -144,8 +143,7 @@ async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promis
 const FORM_VAZIO = { nome: '', cpf: '', nascimento: '', sexo: 'M', municipio: '', especialidade: '', cns: '', telefone: '', endereco: '' }
 
 export default function RecepcaoPage() {
-  const router = useRouter()
-  const usuario = useUsuario()
+  const usuario = useUsuario(['recepcionista'])
   const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel'>('fila')
   const [fila, setFila] = useState(FILA_DEMO)
   const [form, setForm] = useState(FORM_VAZIO)
@@ -327,11 +325,6 @@ export default function RecepcaoPage() {
   function enviarParaTriagem(paciente: any) {
     setFila((f) => f.map((item) => (item.id === paciente.id ? { ...item, status: 'em_triagem' } : item)))
     enviarParaTriagemStorage(paciente)
-    setTimeout(() => {
-      if (confirm(`Paciente ${paciente.nome} foi encaminhado para triagem. Deseja abrir a tela de triagem agora?`)) {
-        router.push('/triagem')
-      }
-    }, 500)
   }
 
   function chamarPaciente(paciente: any) {

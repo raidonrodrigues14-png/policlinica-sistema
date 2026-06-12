@@ -50,7 +50,7 @@ function VitalCard({ value, onChange, l, u, st }: {
 }
 
 export default function TriagemPage() {
-  const usuario = useUsuario()
+  const usuario = useUsuario(['enfermeiro'])
   const [filaTriagem, setFilaTriagem] = useState<any[]>([])
   const [pac, setPac] = useState<any>(null)
   const [v, setV] = useState<Record<string, string>>(VITAIS_VAZIO)

@@ -216,7 +216,7 @@ function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
 }
 
 export default function ProntuarioPage() {
-  const usuario = useUsuario()
+  const usuario = useUsuario(['medico'])
   const [aba, setAba] = useState('anamnese')
   const [salvo, setSalvo] = useState(false)
 

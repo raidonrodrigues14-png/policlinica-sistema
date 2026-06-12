@@ -17,6 +17,14 @@ export const PERFIL_COR: Record<Perfil, string> = {
   gestor: '#f59e0b',
 }
 
+/** Página inicial (e única) de cada perfil. */
+export const ROTA_POR_PERFIL: Record<Perfil, string> = {
+  recepcionista: '/recepcao',
+  enfermeiro: '/triagem',
+  medico: '/prontuario',
+  gestor: '/gestao',
+}
+
 export function getUsuario(): Usuario | null {
   if (typeof window === 'undefined') return null
   try {
@@ -36,10 +44,15 @@ export function iniciais(nome: string): string {
     .toUpperCase()
 }
 
-/** Protege a página: redireciona para /login se não houver sessão. */
-export function useUsuario(): Usuario | null {
+/**
+ * Protege a página:
+ * - sem sessão → redireciona para /login
+ * - com sessão, mas perfil não autorizado → redireciona para a página do próprio perfil
+ */
+export function useUsuario(perfisPermitidos?: Perfil[]): Usuario | null {
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const chavePerfis = perfisPermitidos?.join(',') ?? ''
 
   useEffect(() => {
     const u = getUsuario()
@@ -47,8 +60,13 @@ export function useUsuario(): Usuario | null {
       router.replace('/login')
       return
     }
+    const perfis = chavePerfis ? (chavePerfis.split(',') as Perfil[]) : null
+    if (perfis && !perfis.includes(u.perfil)) {
+      router.replace(ROTA_POR_PERFIL[u.perfil] ?? '/login')
+      return
+    }
     setUsuario(u)
-  }, [router])
+  }, [router, chavePerfis])
 
   return usuario
 }

@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Monitor, Stethoscope, HeartPulse, BarChart3, Eye, EyeOff, AlertCircle, ArrowRight, type LucideIcon } from 'lucide-react'
+import { ROTA_POR_PERFIL, type Perfil } from '@/lib/auth'
 
 interface Profissional {
   id: string
@@ -19,13 +20,6 @@ const PROFISSIONAIS: Profissional[] = [
   { id: 'medico', label: 'Médico', cor: '#ec4899', icon: HeartPulse, usuario: 'medico', senha: '123' },
   { id: 'gestor', label: 'Gestor', cor: '#f59e0b', icon: BarChart3, usuario: 'gestor', senha: '123' },
 ]
-
-const rotasPorPerfil: Record<string, string> = {
-  recepcionista: '/recepcao',
-  enfermeiro: '/triagem',
-  medico: '/prontuario',
-  gestor: '/gestao',
-}
 
 export default function Login() {
   const router = useRouter()
@@ -52,7 +46,7 @@ export default function Login() {
         'usuario',
         JSON.stringify({ nome: profissional?.label, perfil: perfilSelecionado, usuario })
       )
-      router.replace(rotasPorPerfil[perfilSelecionado] ?? '/recepcao')
+      router.replace(ROTA_POR_PERFIL[perfilSelecionado as Perfil] ?? '/recepcao')
     } else {
       setErro('Usuário ou senha inválidos para este perfil.')
     }
