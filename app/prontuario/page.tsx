@@ -1637,7 +1637,7 @@ export default function ProntuarioPage() {
                           </button>
 
                           <a
-                            href={`https://wa.me/?text=${encodeURIComponent(`Olá! Sua teleconsulta está pronta. Acesse pelo link:\nhttps://meet.jit.si/${teleRoomId}\n\nClinica: Policlínica Municipal — Alto Alegre do Maranhão`)}`}
+                            href={`https://wa.me/?text=${encodeURIComponent(`Olá! Sua teleconsulta está pronta. Acesse pelo link:\nhttps://meet.jit.si/${teleRoomId}\n\nClínica: Policlínica Municipal — Alto Alegre do Maranhão`)}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1.5 rounded-lg border border-green-400 bg-green-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-green-600"
@@ -2095,13 +2095,6 @@ export default function ProntuarioPage() {
               <button onClick={() => setShowModal(false)} className="btn-ghost flex-1">Cancelar</button>
               <button onClick={criarNovoPaciente} className="btn-primary flex-1">Iniciar atendimento</button>
             </div>
-          </div>
-        </div>
-      )}
-    </AppShell>
-  )
-}
-         </div>
           </div>
         </div>
       )}
