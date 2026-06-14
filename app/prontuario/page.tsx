@@ -285,6 +285,8 @@ export default function ProntuarioPage() {
   const [teleFiltroEsp, setTeleFiltroEsp] = useState('')
   const [teleUltima, setTeleUltima] = useState<any>(null)
   const telePrintRef = useRef<HTMLDivElement>(null)
+  const [teleRoomId, setTeleRoomId] = useState('')
+  const [teleLinkCopiado, setTeleLinkCopiado] = useState(false)
 
   // Fila de pacientes
   const [filaMedica, setFilaMedica] = useState<any[]>([])
@@ -1565,10 +1567,13 @@ export default function ProntuarioPage() {
                                 <button
                                   disabled={cfg.disabled}
                                   onClick={() => {
+                                    const roomId = `policlinica-altomr-${esp.id}-${Date.now()}`
+                                    setTeleRoomId(roomId)
                                     setTeleEsp(esp)
                                     setTeleAtiva(true)
                                     setTeleTempo(0)
                                     setTeleNota('')
+                                    setTeleLinkCopiado(false)
                                     teleTimerRef.current = setInterval(() => setTeleTempo((t) => t + 1), 1000)
                                   }}
                                   className={`btn btn-sm text-white ${cfg.disabled ? 'cursor-not-allowed bg-slate-300' : 'bg-brand-600 hover:bg-brand-700'}`}
@@ -1606,59 +1611,78 @@ export default function ProntuarioPage() {
                         )}
                       </>
                     ) : (
-                      /* Tela de chamada ativa */
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5">
-                          <div className="flex items-center gap-2.5">
-                            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
-                            <span className="text-[13px] font-bold text-emerald-800">Chamada em andamento</span>
-                            <span className="font-mono text-[13px] font-bold text-emerald-700">
-                              {String(Math.floor(teleTempo / 60)).padStart(2, '0')}:{String(teleTempo % 60).padStart(2, '0')}
-                            </span>
-                          </div>
-                          <div className="text-[12px] font-semibold text-emerald-700">
+                      /* Tela de chamada ativa — Jitsi Meet real */
+                      <div className="space-y-3">
+                        {/* Barra de status */}
+                        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5">
+                          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+                          <span className="text-[13px] font-bold text-emerald-800">
                             {teleEsp?.nome} · {teleEsp?.esp}
-                          </div>
+                          </span>
+                          <span className="font-mono text-[13px] font-bold text-emerald-700">
+                            {String(Math.floor(teleTempo / 60)).padStart(2, '0')}:{String(teleTempo % 60).padStart(2, '0')}
+                          </span>
+
+                          {/* Link para compartilhar com o especialista */}
+                          <button
+                            className="ml-auto flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`https://meet.jit.si/${teleRoomId}`)
+                              setTeleLinkCopiado(true)
+                              setTimeout(() => setTeleLinkCopiado(false), 2500)
+                            }}
+                          >
+                            {teleLinkCopiado ? <CheckCircle2 size={13} /> : <Video size={13} />}
+                            {teleLinkCopiado ? 'Link copiado!' : 'Copiar link para especialista'}
+                          </button>
+
+                          <a
+                            href={`https://meet.jit.si/${teleRoomId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                          >
+                            <MonitorSmartphone size={13} /> Abrir em nova aba
+                          </a>
                         </div>
 
-                        <div className="grid grid-cols-[1fr_220px] gap-3">
-                          {/* Video principal */}
-                          <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden rounded-2xl bg-slate-900">
-                            {teleCamOff ? (
-                              <div className="flex flex-col items-center gap-3 text-slate-500">
-                                <VideoOff size={40} />
-                                <span className="text-sm">Camera desativada</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-3">
-                                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-700 text-3xl font-bold text-white">
-                                  {teleEsp?.avatar}
-                                </div>
-                                <div className="text-sm font-semibold text-white">{teleEsp?.nome}</div>
-                                <div className="text-[11px] text-slate-400">{teleEsp?.esp}</div>
-                              </div>
-                            )}
-                            <div className="absolute bottom-3 right-3 flex h-20 w-28 items-center justify-center rounded-xl bg-slate-700 text-slate-400">
-                              <UserRound size={28} />
-                            </div>
-                            {teleMudo && (
-                              <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white">
-                                <MicOff size={11} /> Mudo
-                              </div>
-                            )}
+                        {/* Layout vídeo + notas */}
+                        <div className="grid grid-cols-[1fr_260px] gap-3">
+                          {/* Jitsi Meet iframe */}
+                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900" style={{ minHeight: 420 }}>
+                            <iframe
+                              src={`https://meet.jit.si/${teleRoomId}#config.startWithAudioMuted=${teleMudo}&config.startWithVideoMuted=${teleCamOff}&config.prejoinPageEnabled=false&config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(usuario?.nome || 'Medico')}`}
+                              allow="camera; microphone; fullscreen; display-capture"
+                              className="h-full w-full"
+                              style={{ minHeight: 420, border: 'none' }}
+                              title="Teleconsulta Jitsi"
+                            />
                           </div>
 
                           {/* Painel lateral */}
                           <div className="flex flex-col gap-3">
+                            {/* Info paciente */}
                             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                               <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Paciente</div>
                               <div className="text-[13px] font-bold text-slate-900">{pacienteAtual?.nome || '—'}</div>
-                              <div className="mt-0.5 text-[11px] text-slate-500">{pacienteAtual?.esp || ''}</div>
+                              <div className="mt-0.5 text-[11px] text-slate-500">{pacienteAtual?.esp || 'Sem especialidade'}</div>
                             </div>
+
+                            {/* Link da sala */}
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Sala da chamada</div>
+                              <div className="break-all rounded-lg bg-slate-50 p-2 text-[10px] text-slate-500 select-all">
+                                meet.jit.si/{teleRoomId}
+                              </div>
+                            </div>
+
+                            {/* Notas */}
                             <div className="flex-1 rounded-xl border border-slate-200 bg-white p-3">
-                              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">Notas da interconsulta</div>
+                              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                              Notas da interconsulta
+                              </div>
                               <textarea
-                                className="min-h-[140px] w-full resize-none rounded-lg bg-slate-50 p-2 text-[12px] text-slate-800 outline-none focus:ring-1 focus:ring-brand-400"
+                                className="min-h-[180px] w-full resize-none rounded-lg bg-slate-50 p-2 text-[12px] text-slate-800 outline-none focus:ring-1 focus:ring-brand-400"
                                 placeholder="Registre orientacoes, condutas e pareceres do especialista..."
                                 value={teleNota}
                                 onChange={(e) => setTeleNota(e.target.value)}
@@ -1667,25 +1691,11 @@ export default function ProntuarioPage() {
                           </div>
                         </div>
 
-                        {/* Controles */}
+                        {/* Botão encerrar */}
                         <div className="flex items-center justify-center gap-3">
                           <button
-                            onClick={() => setTeleMudo((m) => !m)}
-                            title={teleMudo ? 'Ativar microfone' : 'Silenciar'}
-                            className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition-colors ${teleMudo ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            {teleMudo ? <MicOff size={18} /> : <Mic size={18} />}
-                          </button>
-                          <button
-                            onClick={() => setTeleCamOff((c) => !c)}
-                            title={teleCamOff ? 'Ativar camera' : 'Desativar camera'}
-                            className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition-colors ${teleCamOff ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            {teleCamOff ? <VideoOff size={18} /> : <Video size={18} />}
-                          </button>
-                          <button
                             title="Encerrar chamada"
-                            className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg transition-colors hover:bg-rose-700"
+                            className="flex items-center gap-2 rounded-full bg-rose-600 px-6 py-3 font-bold text-white shadow-lg transition-colors hover:bg-rose-700"
                             onClick={() => {
                               if (teleTimerRef.current) clearInterval(teleTimerRef.current)
                               const dur = `${String(Math.floor(teleTempo / 60)).padStart(2, '0')}:${String(teleTempo % 60).padStart(2, '0')}`
@@ -1705,7 +1715,6 @@ export default function ProntuarioPage() {
                               const hist = [...teleHistorico, nova]
                               setTeleHistorico(hist)
                               localStorage.setItem('teleconsultas', JSON.stringify(hist))
-                              // Exportar notas para o campo de orientações do prontuário
                               if (teleNota.trim()) {
                                 const prefixo = `[Teleconsulta ${nova.data} — ${teleEsp?.nome} (${teleEsp?.esp})]:\n`
                                 setOrient((prev: string) => prev ? `${prev}\n\n${prefixo}${teleNota}` : `${prefixo}${teleNota}`)
@@ -1717,7 +1726,7 @@ export default function ProntuarioPage() {
                               setTeleCamOff(false)
                             }}
                           >
-                            <PhoneOff size={22} />
+                            <PhoneOff size={18} /> Encerrar chamada
                           </button>
                         </div>
 
@@ -2074,6 +2083,13 @@ export default function ProntuarioPage() {
               <button onClick={() => setShowModal(false)} className="btn-ghost flex-1">Cancelar</button>
               <button onClick={criarNovoPaciente} className="btn-primary flex-1">Iniciar atendimento</button>
             </div>
+          </div>
+        </div>
+      )}
+    </AppShell>
+  )
+}
+         </div>
           </div>
         </div>
       )}
