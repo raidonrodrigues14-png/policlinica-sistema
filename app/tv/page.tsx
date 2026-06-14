@@ -48,14 +48,9 @@ export default function TVPage() {
     <div className="flex h-screen flex-col overflow-hidden bg-[#0f172a] text-white select-none">
       {/* Cabeçalho */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#10b981] text-xl font-extrabold">
-            +
-          </div>
-          <div>
-            <div className="text-sm font-bold">PoliclínicaMed</div>
-            <div className="text-[10px] text-slate-400">Gestão Municipal de Saúde</div>
-          </div>
+        <div className="flex items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-prefeitura.svg" alt="Prefeitura de Alto Alegre do Maranhão" style={{ height: 44, width: 'auto' }} />
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-[#10b981]">

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ClipboardList, Tv, UserPlus, Megaphone, Stethoscope, ArrowRight, Search,
-  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock,
+  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock, MonitorPlay, ExternalLink,
 } from 'lucide-react'
 import AppShell from '@/components/AppShell'
 import { useUsuario } from '@/lib/auth'
@@ -172,7 +172,7 @@ function TempoEspera({ chegada }: { chegada?: string }) {
 
 export default function RecepcaoPage() {
   const usuario = useUsuario(['recepcionista'])
-  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel'>('fila')
+  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel' | 'tv'>('fila')
   const [fila, setFila] = useState(() => {
     const now = Date.now()
     return FILA_DEMO.map((f, i) => ({
@@ -476,6 +476,7 @@ export default function RecepcaoPage() {
     { id: 'fila', label: 'Fila do dia', icon: ClipboardList },
     { id: 'painel', label: 'Painel de chamadas', icon: Tv },
     { id: 'cadastro', label: 'Novo paciente', icon: UserPlus },
+    { id: 'tv', label: 'TV', icon: MonitorPlay },
   ] as const
 
   return (
@@ -680,6 +681,73 @@ export default function RecepcaoPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TV */}
+            {aba === 'tv' && (
+              <div className="space-y-4">
+                {/* Controles rápidos */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const aguard = fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status))
+                      if (aguard.length > 0) chamarPaciente(aguard[0])
+                    }}
+                    className="btn-info btn-sm"
+                  >
+                    <Megaphone size={14} /> Chamar próximo
+                  </button>
+                  <button
+                    onClick={() => setAutoMode((a) => !a)}
+                    className={`btn btn-sm text-white ${autoMode ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-600 hover:bg-slate-700'}`}
+                  >
+                    Auto: {autoMode ? 'Ligado ✓' : 'Desligado'}
+                  </button>
+                  {autoMode && (
+                    <span className="text-[11px] text-slate-500">Chamando automaticamente a cada 12s</span>
+                  )}
+                  <a
+                    href="/tv"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-ghost btn-sm ml-auto"
+                  >
+                    <ExternalLink size={13} /> Abrir TV em tela cheia
+                  </a>
+                </div>
+
+                {/* Preview da TV em iframe */}
+                <div className="overflow-hidden rounded-xl border border-slate-200 shadow-inner" style={{ height: 520 }}>
+                  <iframe
+                    src="/tv"
+                    className="h-full w-full"
+                    style={{ border: 'none', pointerEvents: 'none' }}
+                    title="Painel de TV"
+                  />
+                </div>
+
+                {/* Fila resumida para chamar */}
+                <div>
+                  <div className="mb-2 text-[11px] font-bold tracking-widest text-slate-500 uppercase">Pacientes na fila</div>
+                  <div className="space-y-1.5">
+                    {fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status)).map((f) => (
+                      <div key={f.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+                        <span className="min-w-12 font-mono text-base font-extrabold text-brand-600">#{f.num}</span>
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold text-slate-900">{f.nome}</div>
+                          <div className="text-[11px] text-slate-400">{f.esp} · {f.cons}</div>
+                        </div>
+                        <button onClick={() => chamarPaciente(f)} className="btn-info btn-sm">
+                          <Megaphone size={13} /> Chamar
+                        </button>
+                      </div>
+                    ))}
+                    {fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status)).length === 0 && (
+                      <div className="py-6 text-center text-sm text-slate-400">Fila vazia</div>
+                    )}
                   </div>
                 </div>
               </div>
