@@ -171,9 +171,27 @@ function TempoEspera({ chegada }: { chegada?: string }) {
 }
 
 
+function waUrl(tel: string, msg: string) {
+  const t = tel.replace(/\D/g, '')
+  return t ? `https://wa.me/55${t}?text=${msg}` : `https://wa.me/?text=${msg}`
+}
+
+function fmtData(dateStr: string) {
+  if (!dateStr) return ''
+  const [y, m, d] = dateStr.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function msgLembrete(a: any, dia: 'hoje' | 'amanha') {
+  const quando = dia === 'hoje' ? 'HOJE' : 'amanhã'
+  return encodeURIComponent(
+    `Olá, ${a.nome}! 👋\n\nLembramos que você tem consulta marcada para *${quando}* (${fmtData(a.dataAgendamento)}) às *${a.horario}*.\n\n🏥 Especialidade: ${a.especialidade}\n📍 Policlínica Municipal — Alto Alegre do Maranhão\n\nChegue com 15 minutos de antecedência com documento de identidade e cartão do SUS. Até logo! 😊`
+  )
+}
+
 function LembretesTab() {
   const [agendamentos, setAgendamentos] = useState<any[]>([])
-  const [enviados, setEnviados] = useState<Set<number>>(new Set())
+  const [enviados, setEnviados] = useState<number[]>([])
 
   useEffect(() => {
     function carregar() {
@@ -187,12 +205,6 @@ function LembretesTab() {
     return () => window.removeEventListener('storage', carregar)
   }, [])
 
-  function fmt(dateStr: string) {
-    if (!dateStr) return ''
-    const [y, m, d] = dateStr.split('-')
-    return `${d}/${m}/${y}`
-  }
-
   function getAmanha() {
     const d = new Date(); d.setDate(d.getDate() + 1)
     return d.toISOString().slice(0, 10)
@@ -202,43 +214,31 @@ function LembretesTab() {
     return new Date().toISOString().slice(0, 10)
   }
 
-  function limparTel(tel: string) {
-    return tel.replace(/\D/g, '')
-  }
-
-  function msgLembrete(a: any, dia: 'hoje' | 'amanha') {
-    const quando = dia === 'hoje' ? 'HOJE' : 'amanhã'
-    return encodeURIComponent(
-      `Olá, ${a.nome}! 👋\n\nLembramos que você tem consulta marcada para *${quando}* (${fmt(a.dataAgendamento)}) às *${a.horario}*.\n\n🏥 Especialidade: ${a.especialidade}\n📍 Policlínica Municipal — Alto Alegre do Maranhão\n\nChegue com 15 minutos de antecedência com documento de identidade e cartão do SUS.\n\nQualquer dúvida, entre em contato conosco. Até logo! 😊`
-    )
-  }
-
   const amanha = getAmanha()
   const hoje = getHoje()
-  const deAmanha = agendamentos.filter(a => a.dataAgendamento === amanha && a.status !== 'cancelado')
-  const deHoje = agendamentos.filter(a => a.dataAgendamento === hoje && a.status !== 'cancelado')
+  const deAmanha = [...agendamentos]
+    .filter(a => a.dataAgendamento === amanha && a.status !== 'cancelado')
+    .sort((a, b) => a.horario.localeCompare(b.horario))
+  const deHoje = [...agendamentos]
+    .filter(a => a.dataAgendamento === hoje && a.status !== 'cancelado')
+    .sort((a, b) => a.horario.localeCompare(b.horario))
 
-  function marcarEnviado(id: number) {
-    setEnviados(prev => new Set([...prev, id]))
+  function marcar(id: number) {
+    setEnviados(prev => prev.includes(id) ? prev : [...prev, id])
   }
 
-  function CardConsulta({ a, dia }: { a: any; dia: 'hoje' | 'amanha' }) {
-    const tel = limparTel(a.telefone || '')
-    const enviado = enviados.has(a.id)
-    const waUrl = tel
-      ? `https://wa.me/55${tel}?text=${msgLembrete(a, dia)}`
-      : `https://wa.me/?text=${msgLembrete(a, dia)}`
-
+  function renderCard(a: any, dia: 'hoje' | 'amanha') {
+    const enviado = enviados.includes(a.id)
+    const url = waUrl(a.telefone || '', msgLembrete(a, dia))
     return (
-      <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${enviado ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+      <div key={a.id} className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${enviado ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-bold text-slate-900">{a.nome}</span>
             {enviado && <CheckCircle2 size={13} className="shrink-0 text-emerald-500" />}
           </div>
           <div className="mt-0.5 text-[11px] text-slate-500">
-            {a.especialidade} · {a.horario}
-            {a.profissional && <> · {a.profissional}</>}
+            {a.especialidade} · {a.horario}{a.profissional ? ` · ${a.profissional}` : ''}
           </div>
           {a.telefone ? (
             <div className="mt-0.5 text-[11px] text-slate-400">{a.telefone}</div>
@@ -247,10 +247,10 @@ function LembretesTab() {
           )}
         </div>
         <a
-          href={waUrl}
+          href={url}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => marcarEnviado(a.id)}
+          onClick={() => marcar(a.id)}
           className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold transition-colors ${enviado ? 'border border-emerald-300 bg-emerald-100 text-emerald-700' : 'bg-green-500 text-white hover:bg-green-600'}`}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
@@ -264,7 +264,6 @@ function LembretesTab() {
 
   return (
     <div className="space-y-5 p-4">
-      {/* Header */}
       <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
         <BellRing size={18} className="text-brand-600" />
         <div>
@@ -277,12 +276,11 @@ function LembretesTab() {
         </div>
       </div>
 
-      {/* Amanhã */}
       <div>
         <div className="mb-2 flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-amber-400" />
           <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
-            Amanhã — {fmt(amanha)} ({deAmanha.length})
+            Amanhã — {fmtData(amanha)} ({deAmanha.length})
           </span>
         </div>
         {deAmanha.length === 0 ? (
@@ -290,32 +288,23 @@ function LembretesTab() {
             Nenhuma consulta agendada para amanhã
           </div>
         ) : (
-          <div className="space-y-2">
-            {deAmanha
-              .sort((a, b) => a.horario.localeCompare(b.horario))
-              .map(a => <CardConsulta key={a.id} a={a} dia="amanha" />)}
-          </div>
+          <div className="space-y-2">{deAmanha.map(a => renderCard(a, 'amanha'))}</div>
         )}
       </div>
 
-      {/* Hoje */}
       {deHoje.length > 0 && (
         <div>
           <div className="mb-2 flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-emerald-500" />
             <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
-              Hoje — {fmt(hoje)} ({deHoje.length})
+              Hoje — {fmtData(hoje)} ({deHoje.length})
             </span>
           </div>
-          <div className="space-y-2">
-            {deHoje
-              .sort((a, b) => a.horario.localeCompare(b.horario))
-              .map(a => <CardConsulta key={a.id} a={a} dia="hoje" />)}
-          </div>
+          <div className="space-y-2">{deHoje.map(a => renderCard(a, 'hoje'))}</div>
         </div>
       )}
 
-      {deAmanha.length === 0 && deHoje.length === 0 && agendamentos.length === 0 && (
+      {agendamentos.length === 0 && (
         <div className="py-16 text-center text-slate-400">
           <BellRing size={32} className="mx-auto mb-3 opacity-30" />
           <div className="text-sm">Nenhum agendamento cadastrado ainda.</div>
@@ -324,6 +313,8 @@ function LembretesTab() {
       )}
     </div>
   )
+}
+
 }
 
 export default function RecepcaoPage() {
