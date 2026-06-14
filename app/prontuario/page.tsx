@@ -2089,10 +2089,3 @@ export default function ProntuarioPage() {
     </AppShell>
   )
 }
-         </div>
-          </div>
-        </div>
-      )}
-    </AppShell>
-  )
-}
