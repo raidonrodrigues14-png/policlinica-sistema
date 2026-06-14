@@ -177,7 +177,7 @@ const ESPS = [
 ]
 const HORARIOS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00']
 
-function AgendamentoTab() {
+function AgendamentoTab({ onConcluido }: { onConcluido?: () => void }) {
   const usuario = useUsuario(['recepcionista', 'gestor', 'medico'])
   const [form, setForm] = useState({
     nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
@@ -225,6 +225,7 @@ function AgendamentoTab() {
     setConfirmado(novo)
     setSucesso(true)
     carregar()
+    setTimeout(() => { if (onConcluido) onConcluido() }, 2500)
 
     const tel = form.telefone?.replace(/\D/g, '')
     if (tel) {
@@ -410,22 +411,7 @@ function LembretesTab() {
         </div>
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-amber-400" />
-          <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
-            Amanhã — {fmtData(amanha)} ({deAmanha.length})
-          </span>
-        </div>
-        {deAmanha.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-[13px] text-slate-400">
-            Nenhuma consulta agendada para amanhã
-          </div>
-        ) : (
-          <div className="space-y-2">{deAmanha.map(a => renderCard(a, 'amanha'))}</div>
-        )}
-      </div>
-
+      {/* Hoje */}
       {deHoje.length > 0 && (
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -438,11 +424,71 @@ function LembretesTab() {
         </div>
       )}
 
+      {/* Amanhã */}
+      <div>
+        <div className="mb-2 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-amber-400" />
+          <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
+            Amanhã — {fmtData(amanha)} ({deAmanha.length})
+          </span>
+        </div>
+        {deAmanha.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-[13px] text-slate-400">
+            Nenhuma consulta para amanhã
+          </div>
+        ) : (
+          <div className="space-y-2">{deAmanha.map(a => renderCard(a, 'amanha'))}</div>
+        )}
+      </div>
+
+      {/* Próximas (além de amanhã) */}
+      {(() => {
+        const proximas = [...agendamentos]
+          .filter(a => a.dataAgendamento > amanha && a.status !== 'cancelado')
+          .sort((a, b) => a.dataAgendamento.localeCompare(b.dataAgendamento))
+        if (proximas.length === 0) return null
+        return (
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-brand-400" />
+              <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
+                Próximas consultas ({proximas.length})
+              </span>
+            </div>
+            <div className="space-y-2">
+              {proximas.map(a => (
+                <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold text-slate-900">{a.nome}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">
+                      {a.especialidade} · {a.horario}{a.profissional ? ` · ${a.profissional}` : ''}
+                    </div>
+                    {a.telefone ? (
+                      <div className="mt-0.5 text-[11px] text-slate-400">{a.telefone}</div>
+                    ) : (
+                      <div className="mt-0.5 text-[11px] text-amber-500">⚠ Sem telefone</div>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="rounded-lg bg-brand-50 px-2.5 py-1 text-[12px] font-bold text-brand-700">
+                      {fmtData(a.dataAgendamento)}
+                    </div>
+                    {a.protocolo && (
+                      <div className="mt-1 font-mono text-[10px] text-slate-400">{a.protocolo}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {agendamentos.length === 0 && (
         <div className="py-16 text-center text-slate-400">
           <BellRing size={32} className="mx-auto mb-3 opacity-30" />
           <div className="text-sm">Nenhum agendamento cadastrado ainda.</div>
-          <div className="mt-1 text-[12px]">Agende consultas pelo Prontuário.</div>
+          <div className="mt-1 text-[12px]">Agende consultas pela aba Agendar.</div>
         </div>
       )}
     </div>
@@ -1040,7 +1086,7 @@ export default function RecepcaoPage() {
               <LembretesTab />
             )}
 
-            {aba === 'agendar' && <AgendamentoTab />}
+            {aba === 'agendar' && <AgendamentoTab onConcluido={() => setAba('lembretes')} />}
 
             {/* CADASTRO */}
             {aba === 'cadastro' && (
