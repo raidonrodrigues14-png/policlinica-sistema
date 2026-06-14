@@ -133,7 +133,6 @@ const ABAS: { id: string; l: string; icon: LucideIcon }[] = [
   { id: 'diagnostico', l: 'Diagnósticos', icon: SearchCheck },
   { id: 'conduta', l: 'Conduta', icon: Pill },
   { id: 'encaminh', l: 'Encaminham.', icon: ArrowRightLeft },
-  { id: 'agendamento', l: 'Agendar Consulta', icon: CalendarDays },
   { id: 'teleconsulta', l: 'Teleconsulta', icon: MonitorSmartphone },
   { id: 'registroTardio', l: 'Registro Tardio', icon: Clock },
   { id: 'resultadosExames', l: 'Result. Exames', icon: Microscope },
@@ -248,14 +247,6 @@ export default function ProntuarioPage() {
   const [justificativa, setJustif] = useState('')
 
   // Agendamento de consulta
-  const [agendamento, setAgendamento] = useState({
-    nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
-    especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '',
-  })
-  const [agendamentoSucesso, setAgendamentoSucesso] = useState(false)
-  const [agendamentoProtocolo, setAgendamentoProtocolo] = useState('')
-  const [agendamentoConfirmado, setAgendamentoConfirmado] = useState<any>(null)
-  const [agendamentosLista, setAgendamentosLista] = useState<any[]>([])
 
   // Registro tardio
   const [registroTardio, setRegistroTardio] = useState({
@@ -338,10 +329,6 @@ export default function ProntuarioPage() {
   const [historicoPaciente, setHistoricoPaciente] = useState<any[]>([])
 
   // ── Carregamento de dados do localStorage ────────────────────
-  const carregarAgendamentos = () => {
-    const stored = localStorage.getItem('agendamentos_consultas')
-    if (stored) setAgendamentosLista(JSON.parse(stored))
-  }
   const carregarRegistrosTardios = () => {
     const stored = localStorage.getItem('registros_tardios')
     if (stored) setRegistrosTardios(JSON.parse(stored))
@@ -370,7 +357,6 @@ export default function ProntuarioPage() {
   useEffect(() => {
     if (!usuario) return
     carregarPacientesMedicos()
-    carregarAgendamentos()
     carregarRegistrosTardios()
     carregarExamesRealizados()
 
@@ -382,7 +368,6 @@ export default function ProntuarioPage() {
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'pacientes_triagem') carregarPacientesMedicos()
-      if (e.key === 'agendamentos_consultas') carregarAgendamentos()
       if (e.key === 'registros_tardios') carregarRegistrosTardios()
       if (e.key === 'exames_realizados') carregarExamesRealizados()
     }
@@ -393,65 +378,6 @@ export default function ProntuarioPage() {
   if (!usuario) return null
 
   // ── Ações ────────────────────────────────────────────────────
-  const salvarAgendamento = () => {
-    if (!agendamento.nome || !agendamento.cpf || !agendamento.dataNascimento || !agendamento.municipio) {
-      alert('Preencha todos os campos obrigatórios (*)')
-      return
-    }
-    const novoAgendamento = {
-      id: Date.now(), ...agendamento,
-      dataSolicitacao: new Date().toISOString(), status: 'agendado', medico: usuario?.nome,
-    }
-    const stored = localStorage.getItem('agendamentos_consultas')
-    const agendamentos = stored ? JSON.parse(stored) : []
-    agendamentos.push(novoAgendamento)
-    localStorage.setItem('agendamentos_consultas', JSON.stringify(agendamentos))
-
-    const pacientesStorage = localStorage.getItem('pacientes')
-    const pacientes = pacientesStorage ? JSON.parse(pacientesStorage) : []
-    const existe = pacientes.find((p: any) => p.cpf === agendamento.cpf)
-    if (!existe) {
-      pacientes.push({
-        id: Date.now(), nome: agendamento.nome, cpf: agendamento.cpf,
-        dataNascimento: agendamento.dataNascimento, sexo: agendamento.sexo,
-        municipio: agendamento.municipio, criado_em: new Date().toISOString(),
-      })
-      localStorage.setItem('pacientes', JSON.stringify(pacientes))
-    }
-
-    const protocolo = Math.random().toString(36).substr(2, 8).toUpperCase()
-    setAgendamentoProtocolo(protocolo)
-    setAgendamentoConfirmado({ ...novoAgendamento, protocolo })
-    setAgendamentoSucesso(true)
-
-    // Disparo automático WhatsApp se tiver telefone
-    const tel = agendamento.telefone?.replace(/\D/g, '')
-    if (tel) {
-      const dataFmt = agendamento.dataAgendamento
-        ? agendamento.dataAgendamento.split('-').reverse().join('/')
-        : ''
-      const msg = encodeURIComponent(
-        `✅ *Agendamento Confirmado!*\n\n` +
-        `Olá, ${agendamento.nome}!\n` +
-        `Seu agendamento foi confirmado com sucesso.\n\n` +
-        `📋 *Protocolo:* ${protocolo}\n` +
-        `👤 *Paciente:* ${agendamento.nome}\n` +
-        `🩺 *Especialidade:* ${agendamento.especialidade}\n` +
-        `👨‍⚕️ *Médico:* ${agendamento.profissional || 'A definir'}\n` +
-        `📅 *Data e hora:* ${dataFmt} às ${agendamento.horario}\n` +
-        `📍 *Local:* Policlínica Municipal\n\n` +
-        `Chegue 15 minutos antes com documento de identidade e cartão do SUS.`
-      )
-      window.open(`https://wa.me/55${tel}?text=${msg}`, '_blank')
-    }
-
-    setAgendamento({
-      nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
-      especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '',
-    })
-    carregarAgendamentos()
-  }
-
   const salvarRegistroTardio = () => {
     if (!registroTardio.cidadao || !registroTardio.dataAtendimento || !registroTardio.justificativa) {
       alert('Preencha todos os campos obrigatórios')
@@ -1125,142 +1051,6 @@ export default function ProntuarioPage() {
                 )}
 
                 {/* AGENDAR CONSULTA */}
-                {aba === 'agendamento' && (
-                  <div className="space-y-4">
-                    <div className="card-pad">
-                      <div className="card-title flex items-center gap-2">
-                        <CalendarDays size={16} className="text-brand-600" /> Agendar Consulta
-                      </div>
-
-                      {agendamentoSucesso && agendamentoConfirmado && (
-                        <div className="mb-4 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md">
-                          {/* Header */}
-                          <div className="flex flex-col items-center gap-1 bg-emerald-600 px-6 py-5 text-center text-white">
-                            <CheckCircle2 size={32} className="mb-1 opacity-90" />
-                            <div className="text-xl font-extrabold">Agendado com sucesso!</div>
-                            <div className="text-[13px] font-medium opacity-80">Seu agendamento foi confirmado</div>
-                          </div>
-
-                          {/* Protocolo */}
-                          <div className="mx-6 mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Número de protocolo</div>
-                            <div className="mt-1 font-mono text-2xl font-extrabold tracking-widest text-emerald-800">{agendamentoProtocolo}</div>
-                            <div className="mt-0.5 text-[10px] text-emerald-500">Guarde este número</div>
-                          </div>
-
-                          {/* Detalhes */}
-                          <div className="divide-y divide-slate-100 px-6 py-3">
-                            {[
-                              { l: 'Paciente', v: agendamentoConfirmado.nome },
-                              { l: 'Especialidade', v: agendamentoConfirmado.especialidade },
-                              { l: 'Médico', v: agendamentoConfirmado.profissional || 'A definir' },
-                              { l: 'Data e hora', v: agendamentoConfirmado.dataAgendamento ? `${agendamentoConfirmado.dataAgendamento.split('-').reverse().join('/')} às ${agendamentoConfirmado.horario}` : agendamentoConfirmado.horario },
-                              { l: 'Local', v: 'Policlínica Municipal' },
-                            ].map(({ l, v }) => (
-                              <div key={l} className="flex items-center justify-between py-2.5">
-                                <span className="text-[12px] text-slate-400">{l}</span>
-                                <span className="text-[13px] font-bold text-slate-800">{v}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Fechar */}
-                          <div className="px-6 pb-4">
-                            <button
-                              onClick={() => { setAgendamentoSucesso(false); setAgendamentoConfirmado(null) }}
-                              className="w-full rounded-xl border border-slate-200 py-2 text-[12px] font-semibold text-slate-500 hover:bg-slate-50"
-                            >
-                              Fechar
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
-                        <div className="field md:col-span-2">
-                          <label className="label">Nome completo *</label>
-                          <input className="input" placeholder="Nome do paciente" value={agendamento.nome} onChange={(e) => setAgendamento({ ...agendamento, nome: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">CPF</label>
-                          <input className="input" placeholder="000.000.000-00" value={agendamento.cpf} onChange={(e) => setAgendamento({ ...agendamento, cpf: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">Data de nascimento *</label>
-                          <input type="date" className="input" value={agendamento.dataNascimento} onChange={(e) => setAgendamento({ ...agendamento, dataNascimento: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">Sexo</label>
-                          <select className="input" value={agendamento.sexo} onChange={(e) => setAgendamento({ ...agendamento, sexo: e.target.value })}>
-                            <option>Masculino</option><option>Feminino</option><option>Outro</option>
-                          </select>
-                        </div>
-                        <div className="field">
-                          <label className="label">Município *</label>
-                          <input className="input" placeholder="Cidade" value={agendamento.municipio} onChange={(e) => setAgendamento({ ...agendamento, municipio: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">WhatsApp / Telefone</label>
-                          <input className="input" placeholder="(99) 99999-9999" value={agendamento.telefone} onChange={(e) => setAgendamento({ ...agendamento, telefone: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">Data agendamento *</label>
-                          <input type="date" className="input" value={agendamento.dataAgendamento} onChange={(e) => setAgendamento({ ...agendamento, dataAgendamento: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">Horário *</label>
-                          <select className="input" value={agendamento.horario} onChange={(e) => setAgendamento({ ...agendamento, horario: e.target.value })}>
-                            {['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'].map((h) => (
-                              <option key={h}>{h}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="field">
-                          <label className="label">Profissional</label>
-                          <input className="input" placeholder="Profissional responsável" value={agendamento.profissional} onChange={(e) => setAgendamento({ ...agendamento, profissional: e.target.value })} />
-                        </div>
-                        <div className="field">
-                          <label className="label">Especialidade</label>
-                          <select className="input" value={agendamento.especialidade} onChange={(e) => setAgendamento({ ...agendamento, especialidade: e.target.value })}>
-                            {ESPECIALIDADES.map((esp) => <option key={esp}>{esp}</option>)}
-                          </select>
-                        </div>
-                        <div className="field md:col-span-2">
-                          <label className="label">Observações</label>
-                          <Textarea value={agendamento.observacoes} onChange={(e) => setAgendamento({ ...agendamento, observacoes: e.target.value })} placeholder="Observações adicionais..." />
-                        </div>
-                      </div>
-
-                      <button onClick={salvarAgendamento} className="btn-primary w-full">
-                        <CalendarDays size={15} /> Agendar consulta
-                      </button>
-                    </div>
-
-                    {agendamentosLista.length > 0 && (
-                      <div className="card-pad">
-                        <div className="card-title">Consultas Agendadas</div>
-                        <div className="space-y-2">
-                          {agendamentosLista
-                            .filter((a) => a.nome === pacienteAtual?.nome || !pacienteAtual)
-                            .slice(-5)
-                            .reverse()
-                            .map((a: any) => (
-                              <div key={a.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-                                <div>
-                                  <div className="text-[13px] font-semibold text-slate-900">{a.nome}</div>
-                                  <div className="text-[11px] text-slate-500">{a.especialidade} · {a.municipio}</div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-[11px] font-bold text-brand-600">{a.dataAgendamento}</div>
-                                  <div className="text-[10px] text-slate-400">{a.horario}</div>
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* REGISTRO TARDIO */}
                 {aba === 'registroTardio' && (

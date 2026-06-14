@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ClipboardList, Tv, UserPlus, Megaphone, Stethoscope, ArrowRight, Search,
-  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock, MonitorPlay, ExternalLink, BellRing,
+  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock, MonitorPlay, ExternalLink, BellRing, CalendarDays,
 } from 'lucide-react'
 import AppShell from '@/components/AppShell'
 import { useUsuario } from '@/lib/auth'
@@ -171,6 +171,140 @@ function TempoEspera({ chegada }: { chegada?: string }) {
 }
 
 
+const ESPS = [
+  'Clínica Geral','Cardiologia','Neurologia','Ortopedia','Pediatria','Ginecologia',
+  'Dermatologia','Oftalmologia','Psiquiatria','Urologia','Endocrinologia','Otorrinolaringologia',
+]
+const HORARIOS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00']
+
+function AgendamentoTab() {
+  const usuario = useUsuario(['recepcionista', 'gestor', 'medico'])
+  const [form, setForm] = useState({
+    nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
+    especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00',
+    profissional: '', observacoes: '', telefone: '',
+  })
+  const [sucesso, setSucesso] = useState(false)
+  const [protocolo, setProtocolo] = useState('')
+  const [confirmado, setConfirmado] = useState<any>(null)
+  const [lista, setLista] = useState<any[]>([])
+
+  function carregar() {
+    try {
+      const raw = localStorage.getItem('agendamentos_consultas')
+      setLista(raw ? JSON.parse(raw) : [])
+    } catch { setLista([]) }
+  }
+
+  useEffect(() => { carregar() }, [])
+
+  function salvar() {
+    if (!form.nome || !form.dataNascimento || !form.municipio) {
+      alert('Preencha: Nome, Data de nascimento e Município (*)')
+      return
+    }
+    const proto = Math.random().toString(36).substr(2, 8).toUpperCase()
+    const novo = {
+      id: Date.now(), ...form,
+      dataSolicitacao: new Date().toISOString(),
+      status: 'agendado', medico: usuario?.nome || '', protocolo: proto,
+    }
+    const raw = localStorage.getItem('agendamentos_consultas')
+    const agendamentos = raw ? JSON.parse(raw) : []
+    agendamentos.push(novo)
+    localStorage.setItem('agendamentos_consultas', JSON.stringify(agendamentos))
+
+    const pacRaw = localStorage.getItem('pacientes')
+    const pacientes = pacRaw ? JSON.parse(pacRaw) : []
+    if (!pacientes.find((p: any) => p.cpf === form.cpf)) {
+      pacientes.push({ id: Date.now(), nome: form.nome, cpf: form.cpf, dataNascimento: form.dataNascimento, sexo: form.sexo, municipio: form.municipio, criado_em: new Date().toISOString() })
+      localStorage.setItem('pacientes', JSON.stringify(pacientes))
+    }
+
+    setProtocolo(proto)
+    setConfirmado(novo)
+    setSucesso(true)
+    carregar()
+
+    const tel = form.telefone?.replace(/\D/g, '')
+    if (tel) {
+      const dataFmt = form.dataAgendamento ? form.dataAgendamento.split('-').reverse().join('/') : ''
+      const linha1 = encodeURIComponent('✅ *Agendamento Confirmado!*\n\nOlá, ' + form.nome + '!\nSeu agendamento foi confirmado.\n\n')
+      const linha2 = encodeURIComponent('📋 *Protocolo:* ' + proto + '\n🩺 *Especialidade:* ' + form.especialidade + '\n👨‍⚕️ *Médico:* ' + (form.profissional || 'A definir') + '\n📅 *Data:* ' + dataFmt + ' às ' + form.horario + '\n📍 *Local:* Policlínica Municipal\n\nChegue 15 min antes com RG e cartão SUS.')
+      window.open('https://wa.me/55' + tel + '?text=' + linha1 + linha2, '_blank')
+    }
+
+    setForm({ nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '', especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '' })
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      {sucesso && confirmado && (
+        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md">
+          <div className="flex flex-col items-center gap-1 bg-emerald-600 px-6 py-5 text-center text-white">
+            <CheckCircle2 size={32} className="mb-1 opacity-90" />
+            <div className="text-xl font-extrabold">Agendado com sucesso!</div>
+            <div className="text-[13px] font-medium opacity-80">Seu agendamento foi confirmado</div>
+          </div>
+          <div className="mx-6 mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Número de protocolo</div>
+            <div className="mt-1 font-mono text-2xl font-extrabold tracking-widest text-emerald-800">{protocolo}</div>
+            <div className="mt-0.5 text-[10px] text-emerald-500">Guarde este número</div>
+          </div>
+          <div className="divide-y divide-slate-100 px-6 py-3">
+            {([['Paciente', confirmado.nome],['Especialidade', confirmado.especialidade],['Médico', confirmado.profissional || 'A definir'],['Data e hora', confirmado.dataAgendamento ? confirmado.dataAgendamento.split('-').reverse().join('/') + ' às ' + confirmado.horario : confirmado.horario],['Local','Policlínica Municipal']] as [string,string][]).map(([l,v]) => (
+              <div key={l} className="flex items-center justify-between py-2.5">
+                <span className="text-[12px] text-slate-400">{l}</span>
+                <span className="text-[13px] font-bold text-slate-800">{v}</span>
+              </div>
+            ))}
+          </div>
+          <div className="px-6 pb-4">
+            <button onClick={() => { setSucesso(false); setConfirmado(null) }} className="w-full rounded-xl border border-slate-200 py-2 text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Fechar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2 text-[15px] font-bold text-slate-900">
+          <CalendarDays size={18} className="text-brand-600" /> Agendar Consulta
+        </div>
+        <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
+          <div className="field md:col-span-2"><label className="label">Nome completo *</label><input className="input" placeholder="Nome do paciente" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} /></div>
+          <div className="field"><label className="label">CPF</label><input className="input" placeholder="000.000.000-00" value={form.cpf} onChange={e => setForm({ ...form, cpf: e.target.value })} /></div>
+          <div className="field"><label className="label">Data de nascimento *</label><input type="date" className="input" value={form.dataNascimento} onChange={e => setForm({ ...form, dataNascimento: e.target.value })} /></div>
+          <div className="field"><label className="label">Sexo</label><select className="input" value={form.sexo} onChange={e => setForm({ ...form, sexo: e.target.value })}><option>Masculino</option><option>Feminino</option><option>Outro</option></select></div>
+          <div className="field"><label className="label">Município *</label><input className="input" placeholder="Cidade" value={form.municipio} onChange={e => setForm({ ...form, municipio: e.target.value })} /></div>
+          <div className="field"><label className="label">WhatsApp / Telefone</label><input className="input" placeholder="(99) 99999-9999" value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} /></div>
+          <div className="field"><label className="label">Data agendamento *</label><input type="date" className="input" value={form.dataAgendamento} onChange={e => setForm({ ...form, dataAgendamento: e.target.value })} /></div>
+          <div className="field"><label className="label">Horário</label><select className="input" value={form.horario} onChange={e => setForm({ ...form, horario: e.target.value })}>{HORARIOS.map(h => <option key={h}>{h}</option>)}</select></div>
+          <div className="field"><label className="label">Profissional</label><input className="input" placeholder="Profissional responsável" value={form.profissional} onChange={e => setForm({ ...form, profissional: e.target.value })} /></div>
+          <div className="field"><label className="label">Especialidade</label><select className="input" value={form.especialidade} onChange={e => setForm({ ...form, especialidade: e.target.value })}>{ESPS.map(e => <option key={e}>{e}</option>)}</select></div>
+          <div className="field md:col-span-2"><label className="label">Observações</label><textarea className="input min-h-[72px] resize-none" placeholder="Observações adicionais..." value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} /></div>
+        </div>
+        <button onClick={salvar} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-[14px] font-bold text-white hover:bg-brand-700">
+          <CalendarDays size={16} /> Agendar consulta
+        </button>
+      </div>
+
+      {lista.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 text-[13px] font-bold text-slate-700">Consultas Agendadas ({lista.length})</div>
+          <div className="space-y-2">
+            {[...lista].reverse().slice(0, 10).map((a: any) => (
+              <div key={a.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5">
+                <div><div className="text-[13px] font-semibold text-slate-900">{a.nome}</div><div className="text-[11px] text-slate-500">{a.especialidade} · {a.municipio}</div></div>
+                <div className="text-right"><div className="text-[11px] font-bold text-brand-600">{a.dataAgendamento ? a.dataAgendamento.split('-').reverse().join('/') : ''}</div><div className="text-[10px] text-slate-400">{a.horario}</div></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 function waUrl(tel: string, msg: string) {
   const t = tel.replace(/\D/g, '')
   return t ? `https://wa.me/55${t}?text=${msg}` : `https://wa.me/?text=${msg}`
@@ -317,7 +451,7 @@ function LembretesTab() {
 
 export default function RecepcaoPage() {
   const usuario = useUsuario(['recepcionista'])
-  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel' | 'tv' | 'lembretes'>('fila')
+  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel' | 'tv' | 'lembretes' | 'agendar'>('fila')
   const [fila, setFila] = useState(() => {
     const now = Date.now()
     return FILA_DEMO.map((f, i) => ({
@@ -623,6 +757,7 @@ export default function RecepcaoPage() {
     { id: 'cadastro', label: 'Novo paciente', icon: UserPlus },
     { id: 'tv', label: 'TV', icon: MonitorPlay },
     { id: 'lembretes', label: 'Lembretes', icon: BellRing },
+    { id: 'agendar', label: 'Agendar', icon: CalendarDays },
   ] as const
 
   return (
@@ -904,6 +1039,8 @@ export default function RecepcaoPage() {
             {aba === 'lembretes' && (
               <LembretesTab />
             )}
+
+            {aba === 'agendar' && <AgendamentoTab />}
 
             {/* CADASTRO */}
             {aba === 'cadastro' && (
