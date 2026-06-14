@@ -24,14 +24,13 @@ export default function AppShell({ usuario, title, actions, children }: AppShell
     <div className="flex h-screen flex-col overflow-hidden bg-slate-100">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4">
         {/* Marca */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-lg font-extrabold text-white">
-            +
-          </div>
-          <div className="hidden leading-tight md:block">
-            <div className="text-[13px] font-bold text-slate-900">PoliclínicaMed</div>
-            <div className="text-[10px] text-slate-400">Gestão Municipal de Saúde</div>
-          </div>
+        <div className="flex items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-prefeitura.svg"
+            alt="Prefeitura de Alto Alegre do Maranhão"
+            className="h-10 w-auto"
+          />
         </div>
 
         <div className="mx-2 h-7 w-px bg-slate-200" />

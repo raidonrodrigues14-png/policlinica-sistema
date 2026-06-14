@@ -22,6 +22,40 @@ export interface MedItem {
   loading?: boolean
 }
 
+export const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="180" height="52">
+  <rect x="1" y="1" width="418" height="118" rx="16" ry="16" fill="white" stroke="#e0e0e0" stroke-width="1.5"/>
+  <rect x="12" y="12" width="46" height="46" rx="4" fill="#3d7a5a"/>
+  <circle cx="35" cy="35" r="10" fill="none" stroke="white" stroke-width="2.5"/>
+  <line x1="35" y1="20" x2="35" y2="17" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="35" y1="53" x2="35" y2="50" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="20" y1="35" x2="17" y2="35" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="53" y1="35" x2="50" y2="35" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="24" y1="24" x2="22" y2="22" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="48" y1="48" x2="46" y2="46" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="46" y1="24" x2="48" y2="22" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="22" y1="48" x2="24" y2="46" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <rect x="62" y="12" width="46" height="46" rx="4" fill="#5a9e72"/>
+  <path d="M70 20 Q80 28 72 36 Q64 44 78 52" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <path d="M82 20 Q90 28 95 36 Q100 44 95 52" fill="none" stroke="#4a8a62" stroke-width="3" stroke-linecap="round"/>
+  <rect x="12" y="62" width="46" height="46" rx="4" fill="#6db88a"/>
+  <line x1="35" y1="100" x2="35" y2="78" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <path d="M35 78 Q25 68 20 72" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M35 78 Q45 68 50 72" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M35 78 Q30 65 28 60" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M35 78 Q40 65 42 60" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="62" y="62" width="46" height="46" rx="4" fill="#2d6b4a"/>
+  <line x1="68" y1="78" x2="102" y2="78" stroke="#5a9e72" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="68" y1="84" x2="102" y2="84" stroke="#5a9e72" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="68" y1="90" x2="102" y2="90" stroke="#5a9e72" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="68" y1="96" x2="102" y2="96" stroke="#5a9e72" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M68 76 Q85 64 102 76" fill="#3d7a5a"/>
+  <line x1="118" y1="14" x2="118" y2="106" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="130" y="38" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#3d7a5a" letter-spacing="3">PREFEITURA DE</text>
+  <text x="130" y="68" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="#2d6b4a" letter-spacing="1">ALTO ALEGRE</text>
+  <text x="130" y="94" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="#2d6b4a" letter-spacing="1">DO MARANH&#xC3;O</text>
+  <text x="131" y="111" font-family="Arial, sans-serif" font-size="12" font-style="italic" fill="#3d7a5a" letter-spacing="2">Cuidando da nossa gente!</text>
+</svg>`
+
 export const UNIDADE = {
   prefeitura: 'PREFEITURA MUNICIPAL',
   secretaria: 'Secretaria Municipal de Saude',
@@ -73,11 +107,7 @@ export default function DocPreview({ tipo, dados }: { tipo: DocTipo; dados: any 
   const Header = () => (
     <div style={estilos.header}>
       <div style={estilos.logo}>
-        <div style={estilos.logoBox}>+</div>
-        <div>
-          <div style={estilos.org}>{UNIDADE.prefeitura}</div>
-          <div style={estilos.orgSub}>{UNIDADE.secretaria}<br />{UNIDADE.unidade}</div>
-        </div>
+        <div dangerouslySetInnerHTML={{ __html: LOGO_SVG }} />
       </div>
       <div style={estilos.qr}>QR<br />Code</div>
     </div>
