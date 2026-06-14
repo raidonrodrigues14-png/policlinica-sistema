@@ -9,7 +9,7 @@
  * estar embutidos nos elementos.
  */
 
-export type DocTipo = 'receita' | 'atestado' | 'declaracao' | 'exames' | 'encaminhamento'
+export type DocTipo = 'receita' | 'atestado' | 'declaracao' | 'exames' | 'encaminhamento' | 'parecer'
 
 export interface MedItem {
   id: string
@@ -240,6 +240,52 @@ export default function DocPreview({ tipo, dados }: { tipo: DocTipo; dados: any 
       <div style={estilos.secTitle}>Justificativa clinica</div>
       <div style={{ fontSize: 12, color: '#333', lineHeight: 1.6, marginBottom: 14 }}>{dados.justificativa || '—'}</div>
       <Rodape />
+    </div>
+  )
+
+  if (tipo === 'parecer') return (
+    <div style={estilos.papel}>
+      <Header />
+      <div style={estilos.badge}>
+        <div style={estilos.badgeTitle}>Parecer do Especialista</div>
+        <div style={estilos.badgeSub}>Interconsulta por Teleconsulta</div>
+      </div>
+      <PacienteBox />
+
+      {/* Dados do especialista */}
+      <div style={estilos.secTitle}>Especialista Consultado</div>
+      <div style={{ background: '#f5f7fa', border: '1px solid #e0e4ea', borderRadius: 4, padding: '10px 14px', marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a3a6e' }}>{dados.especialistaNome || '—'}</div>
+        <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>{dados.especialistaEsp || '—'} · {dados.especialistaCrm || '—'}</div>
+        <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
+          Data: <strong>{dados.dataConsulta || hoje}</strong> &nbsp;|&nbsp; Duração: <strong>{dados.duracao || '—'}</strong>
+        </div>
+      </div>
+
+      {/* Notas / Parecer */}
+      <div style={estilos.secTitle}>Parecer e Orientacoes</div>
+      <div style={{ fontSize: 12, color: '#333', lineHeight: 1.75, marginBottom: 14, whiteSpace: 'pre-wrap' }}>
+        {dados.notas || 'Sem observacoes registradas.'}
+      </div>
+
+      {/* CID se houver */}
+      {dados.cid && (
+        <>
+          <div style={estilos.secTitle}>CID-10 Referenciado</div>
+          <div style={{ fontSize: 12, color: '#333', marginBottom: 14 }}>{dados.cid}</div>
+        </>
+      )}
+
+      {/* Medico solicitante */}
+      <div style={estilos.secTitle}>Medico Solicitante</div>
+      <div style={{ fontSize: 12, marginBottom: 14 }}>
+        <strong>{dados.medico || '—'}</strong>
+        {dados.crm && <span style={{ color: '#666' }}> · {dados.crm}</span>}
+      </div>
+
+      <div style={{ ...estilos.valida, borderTop: '1px solid #e0e4ea', paddingTop: 10, marginTop: 8 }}>
+        Documento gerado eletronicamente via Teleconsulta · Policlinica Municipal de Alto Alegre do Maranhao
+      </div>
     </div>
   )
 

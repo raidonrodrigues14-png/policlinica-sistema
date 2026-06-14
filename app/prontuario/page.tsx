@@ -283,6 +283,8 @@ export default function ProntuarioPage() {
   const [teleTempo, setTeleTempo] = useState(0)
   const teleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [teleFiltroEsp, setTeleFiltroEsp] = useState('')
+  const [teleUltima, setTeleUltima] = useState<any>(null)
+  const telePrintRef = useRef<HTMLDivElement>(null)
 
   // Fila de pacientes
   const [filaMedica, setFilaMedica] = useState<any[]>([])
@@ -1691,8 +1693,11 @@ export default function ProntuarioPage() {
                                 id: Date.now(),
                                 especialista: teleEsp?.nome,
                                 especialidade: teleEsp?.esp,
+                                crm: teleEsp?.crm,
                                 avatar: teleEsp?.avatar,
                                 paciente: pacienteAtual?.nome || '',
+                                cpf: pacienteAtual?.cpf || '',
+                                medico: usuario?.nome || '',
                                 data: new Date().toLocaleDateString('pt-BR'),
                                 duracao: dur,
                                 notas: teleNota,
@@ -1700,6 +1705,12 @@ export default function ProntuarioPage() {
                               const hist = [...teleHistorico, nova]
                               setTeleHistorico(hist)
                               localStorage.setItem('teleconsultas', JSON.stringify(hist))
+                              // Exportar notas para o campo de orientações do prontuário
+                              if (teleNota.trim()) {
+                                const prefixo = `[Teleconsulta ${nova.data} — ${teleEsp?.nome} (${teleEsp?.esp})]:\n`
+                                setOrient((prev: string) => prev ? `${prev}\n\n${prefixo}${teleNota}` : `${prefixo}${teleNota}`)
+                              }
+                              setTeleUltima(nova)
                               setTeleAtiva(false)
                               setTeleEsp(null)
                               setTeleMudo(false)
@@ -1715,6 +1726,84 @@ export default function ProntuarioPage() {
                             <strong>Notas salvas automaticamente</strong> ao encerrar a chamada.
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Card pós-consulta */}
+                    {teleUltima && !teleAtiva && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                        <div className="mb-3 flex items-center gap-2">
+                          <CheckCircle2 size={16} className="text-emerald-600" />
+                          <span className="text-[13px] font-bold text-emerald-800">
+                            Teleconsulta encerrada — {teleUltima.data} · {teleUltima.duracao}
+                          </span>
+                        </div>
+                        <div className="mb-3 text-[12px] text-emerald-700">
+                          <strong>{teleUltima.especialista}</strong> ({teleUltima.especialidade})
+                          {teleUltima.notas && (
+                            <> · Notas exportadas para <strong>Conduta &gt; Orientacoes</strong></>
+                          )}
+                        </div>
+
+                        {/* Acoes */}
+                        <div className="flex flex-wrap gap-2">
+                          {/* Imprimir parecer */}
+                          <button
+                            onClick={() => {
+                              const el = telePrintRef.current
+                              if (!el) return
+                              const html = el.innerHTML
+                              const w = window.open('', '_blank', 'width=700,height=900')
+                              if (!w) return
+                              w.document.write(`<!DOCTYPE html><html><head><title>Parecer</title>
+                              <style>body{margin:20px;font-family:Arial,sans-serif;}@media print{body{margin:0;}}</style>
+                              </head><body>${html}<script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`)
+                              w.document.close()
+                            }}
+                            className="btn-primary btn-sm"
+                          >
+                            <Printer size={13} /> Imprimir Parecer
+                          </button>
+
+                          {/* Ir para conduta */}
+                          {teleUltima.notas && (
+                            <button
+                              onClick={() => setAba('conduta')}
+                              className="btn-info btn-sm"
+                            >
+                              <ClipboardList size={13} /> Ver em Conduta
+                            </button>
+                          )}
+
+                          {/* Limpar card */}
+                          <button
+                            onClick={() => setTeleUltima(null)}
+                            className="btn-ghost btn-sm ml-auto"
+                          >
+                            <X size={13} /> Fechar
+                          </button>
+                        </div>
+
+                        {/* Documento oculto para impressao */}
+                        <div className="hidden">
+                          <div ref={telePrintRef}>
+                            <DocPreview
+                              tipo="parecer"
+                              dados={{
+                                paciente: teleUltima.paciente,
+                                cpf: teleUltima.cpf,
+                                medico: teleUltima.medico,
+                                crm: docCrm,
+                                especialistaNome: teleUltima.especialista,
+                                especialistaEsp: teleUltima.especialidade,
+                                especialistaCrm: teleUltima.crm,
+                                dataConsulta: teleUltima.data,
+                                duracao: teleUltima.duracao,
+                                notas: teleUltima.notas,
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
