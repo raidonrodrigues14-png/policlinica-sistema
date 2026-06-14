@@ -250,7 +250,7 @@ export default function ProntuarioPage() {
   // Agendamento de consulta
   const [agendamento, setAgendamento] = useState({
     nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
-    especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '',
+    especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '',
   })
   const [agendamentoSucesso, setAgendamentoSucesso] = useState(false)
   const [agendamentosLista, setAgendamentosLista] = useState<any[]>([])
@@ -421,7 +421,7 @@ export default function ProntuarioPage() {
     setTimeout(() => setAgendamentoSucesso(false), 3000)
     setAgendamento({
       nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
-      especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '',
+      especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '',
     })
     carregarAgendamentos()
   }
@@ -1134,6 +1134,10 @@ export default function ProntuarioPage() {
                         <div className="field">
                           <label className="label">Município *</label>
                           <input className="input" placeholder="Cidade" value={agendamento.municipio} onChange={(e) => setAgendamento({ ...agendamento, municipio: e.target.value })} />
+                        </div>
+                        <div className="field">
+                          <label className="label">WhatsApp / Telefone</label>
+                          <input className="input" placeholder="(99) 99999-9999" value={agendamento.telefone} onChange={(e) => setAgendamento({ ...agendamento, telefone: e.target.value })} />
                         </div>
                         <div className="field">
                           <label className="label">Data agendamento *</label>

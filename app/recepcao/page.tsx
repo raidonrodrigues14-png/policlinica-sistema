@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ClipboardList, Tv, UserPlus, Megaphone, Stethoscope, ArrowRight, Search,
-  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock, MonitorPlay, ExternalLink,
+  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock, MonitorPlay, ExternalLink, BellRing,
 } from 'lucide-react'
 import AppShell from '@/components/AppShell'
 import { useUsuario } from '@/lib/auth'
@@ -167,6 +167,162 @@ function TempoEspera({ chegada }: { chegada?: string }) {
       <Clock size={10} />
       {label}
     </span>
+  )
+}
+
+
+function LembretesTab() {
+  const [agendamentos, setAgendamentos] = useState<any[]>([])
+  const [enviados, setEnviados] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    function carregar() {
+      try {
+        const raw = localStorage.getItem('agendamentos_consultas')
+        setAgendamentos(raw ? JSON.parse(raw) : [])
+      } catch { setAgendamentos([]) }
+    }
+    carregar()
+    window.addEventListener('storage', carregar)
+    return () => window.removeEventListener('storage', carregar)
+  }, [])
+
+  function fmt(dateStr: string) {
+    if (!dateStr) return ''
+    const [y, m, d] = dateStr.split('-')
+    return `${d}/${m}/${y}`
+  }
+
+  function getAmanha() {
+    const d = new Date(); d.setDate(d.getDate() + 1)
+    return d.toISOString().slice(0, 10)
+  }
+
+  function getHoje() {
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  function limparTel(tel: string) {
+    return tel.replace(/\D/g, '')
+  }
+
+  function msgLembrete(a: any, dia: 'hoje' | 'amanha') {
+    const quando = dia === 'hoje' ? 'HOJE' : 'amanhã'
+    return encodeURIComponent(
+      `Olá, ${a.nome}! 👋\n\nLembramos que você tem consulta marcada para *${quando}* (${fmt(a.dataAgendamento)}) às *${a.horario}*.\n\n🏥 Especialidade: ${a.especialidade}\n📍 Policlínica Municipal — Alto Alegre do Maranhão\n\nChegue com 15 minutos de antecedência com documento de identidade e cartão do SUS.\n\nQualquer dúvida, entre em contato conosco. Até logo! 😊`
+    )
+  }
+
+  const amanha = getAmanha()
+  const hoje = getHoje()
+  const deAmanha = agendamentos.filter(a => a.dataAgendamento === amanha && a.status !== 'cancelado')
+  const deHoje = agendamentos.filter(a => a.dataAgendamento === hoje && a.status !== 'cancelado')
+
+  function marcarEnviado(id: number) {
+    setEnviados(prev => new Set([...prev, id]))
+  }
+
+  function CardConsulta({ a, dia }: { a: any; dia: 'hoje' | 'amanha' }) {
+    const tel = limparTel(a.telefone || '')
+    const enviado = enviados.has(a.id)
+    const waUrl = tel
+      ? `https://wa.me/55${tel}?text=${msgLembrete(a, dia)}`
+      : `https://wa.me/?text=${msgLembrete(a, dia)}`
+
+    return (
+      <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${enviado ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-bold text-slate-900">{a.nome}</span>
+            {enviado && <CheckCircle2 size={13} className="shrink-0 text-emerald-500" />}
+          </div>
+          <div className="mt-0.5 text-[11px] text-slate-500">
+            {a.especialidade} · {a.horario}
+            {a.profissional && <> · {a.profissional}</>}
+          </div>
+          {a.telefone ? (
+            <div className="mt-0.5 text-[11px] text-slate-400">{a.telefone}</div>
+          ) : (
+            <div className="mt-0.5 text-[11px] text-amber-500">⚠ Sem telefone cadastrado</div>
+          )}
+        </div>
+        <a
+          href={waUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => marcarEnviado(a.id)}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold transition-colors ${enviado ? 'border border-emerald-300 bg-emerald-100 text-emerald-700' : 'bg-green-500 text-white hover:bg-green-600'}`}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+          {enviado ? 'Reenviado' : 'Enviar'}
+        </a>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5 p-4">
+      {/* Header */}
+      <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+        <BellRing size={18} className="text-brand-600" />
+        <div>
+          <div className="text-[13px] font-bold text-brand-900">Lembretes de Consulta via WhatsApp</div>
+          <div className="text-[11px] text-brand-600">Clique em "Enviar" para abrir o WhatsApp com a mensagem já preenchida</div>
+        </div>
+        <div className="ml-auto text-right">
+          <div className="text-[22px] font-extrabold text-brand-700">{deAmanha.length}</div>
+          <div className="text-[10px] text-brand-500">consultas amanhã</div>
+        </div>
+      </div>
+
+      {/* Amanhã */}
+      <div>
+        <div className="mb-2 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-amber-400" />
+          <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
+            Amanhã — {fmt(amanha)} ({deAmanha.length})
+          </span>
+        </div>
+        {deAmanha.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-[13px] text-slate-400">
+            Nenhuma consulta agendada para amanhã
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {deAmanha
+              .sort((a, b) => a.horario.localeCompare(b.horario))
+              .map(a => <CardConsulta key={a.id} a={a} dia="amanha" />)}
+          </div>
+        )}
+      </div>
+
+      {/* Hoje */}
+      {deHoje.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="text-[12px] font-bold uppercase tracking-widest text-slate-500">
+              Hoje — {fmt(hoje)} ({deHoje.length})
+            </span>
+          </div>
+          <div className="space-y-2">
+            {deHoje
+              .sort((a, b) => a.horario.localeCompare(b.horario))
+              .map(a => <CardConsulta key={a.id} a={a} dia="hoje" />)}
+          </div>
+        </div>
+      )}
+
+      {deAmanha.length === 0 && deHoje.length === 0 && agendamentos.length === 0 && (
+        <div className="py-16 text-center text-slate-400">
+          <BellRing size={32} className="mx-auto mb-3 opacity-30" />
+          <div className="text-sm">Nenhum agendamento cadastrado ainda.</div>
+          <div className="mt-1 text-[12px]">Agende consultas pelo Prontuário.</div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -477,6 +633,7 @@ export default function RecepcaoPage() {
     { id: 'painel', label: 'Painel de chamadas', icon: Tv },
     { id: 'cadastro', label: 'Novo paciente', icon: UserPlus },
     { id: 'tv', label: 'TV', icon: MonitorPlay },
+    { id: 'lembretes', label: 'Lembretes', icon: BellRing },
   ] as const
 
   return (
@@ -751,6 +908,12 @@ export default function RecepcaoPage() {
                   </div>
                 </div>
               </div>
+            )}
+
+
+            {/* LEMBRETES */}
+            {aba === 'lembretes' && (
+              <LembretesTab />
             )}
 
             {/* CADASTRO */}
