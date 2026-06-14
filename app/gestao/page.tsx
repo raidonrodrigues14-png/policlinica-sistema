@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FileSpreadsheet, FileDown } from 'lucide-react'
 import AppShell from '@/components/AppShell'
 import { useUsuario } from '@/lib/auth'
@@ -51,6 +51,73 @@ const maxVal = Math.max(...ESPS.map((e) => e.val))
 export default function GestaoPage() {
   const usuario = useUsuario(['gestor'])
   const [aba, setAba] = useState('dashboard')
+  const [historico, setHistorico] = useState<any[]>([])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('historico_atendimentos')
+      if (raw) setHistorico(JSON.parse(raw))
+    } catch {}
+  }, [])
+
+  // KPIs calculados a partir do histórico real
+  const mesAtual = new Date().toISOString().slice(0, 7) // "2026-06"
+  const doMes = historico.filter((h) => h.data_atendimento?.startsWith(mesAtual))
+
+  const totalMes = doMes.length
+
+  const tempoMedioMin = useMemo(() => {
+    const comTempo = doMes.filter((h) => h.paciente?.chegada && h.data_atendimento)
+    if (comTempo.length === 0) return null
+    const soma = comTempo.reduce((acc, h) => {
+      const diff = (new Date(h.data_atendimento).getTime() - new Date(h.paciente.chegada).getTime()) / 60000
+      return acc + diff
+    }, 0)
+    return Math.round(soma / comTempo.length)
+  }, [doMes])
+
+  const porEspReal = useMemo(() => {
+    const mapa: Record<string, number> = {}
+    doMes.forEach((h) => {
+      const esp = h.paciente?.esp || 'Outros'
+      mapa[esp] = (mapa[esp] || 0) + 1
+    })
+    return Object.entries(mapa)
+      .sort((a, b) => b[1] - a[1])
+      .map(([esp, val], i) => ({
+        esp,
+        val,
+        cor: ['#0369a1','#0ea5e9','#059669','#be185d','#65a30d','#b45309','#94a3b8'][i] || '#94a3b8',
+      }))
+  }, [doMes])
+
+  const porMedicoReal = useMemo(() => {
+    const mapa: Record<string, { consultas: number; esp: Set<string> }> = {}
+    doMes.forEach((h) => {
+      const nome = h.medico || 'Não identificado'
+      if (!mapa[nome]) mapa[nome] = { consultas: 0, esp: new Set() }
+      mapa[nome].consultas += 1
+      if (h.paciente?.esp) mapa[nome].esp.add(h.paciente.esp)
+    })
+    return Object.entries(mapa)
+      .sort((a, b) => b[1].consultas - a[1].consultas)
+      .map(([nome, d]) => ({
+        nome,
+        esp: [...d.esp].join(', ') || '—',
+        consultas: d.consultas,
+        meta: 80,
+        pct: Math.round((d.consultas / 80) * 100),
+      }))
+  }, [doMes])
+
+  // Fallback para dados demo quando histórico estiver vazio
+  const espData = porEspReal.length > 0 ? porEspReal : ESPS
+  const prodData = porMedicoReal.length > 0 ? porMedicoReal : PROD
+  const maxValReal = Math.max(...espData.map((e) => e.val), 1)
+
+  const tempoStr = tempoMedioMin !== null ? `${tempoMedioMin} min` : '—'
+  const totalStr = totalMes > 0 ? String(totalMes) : '—'
+  const espAtivas = new Set(doMes.map((h) => h.paciente?.esp).filter(Boolean)).size
 
   if (!usuario) return null
 
@@ -85,10 +152,10 @@ export default function GestaoPage() {
           <div>
             <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
-                { l: 'Consultas no mês', v: '347', sub: '+12% vs maio', cls: 'text-sky-700' },
-                { l: 'Tempo médio espera', v: '18 min', sub: '-4min vs maio', cls: 'text-brand-600' },
-                { l: 'Taxa absenteísmo', v: '8%', sub: 'Acima da meta', cls: 'text-amber-500' },
-                { l: 'Especialidades ativas', v: '6', sub: 'Estável', cls: 'text-violet-500' },
+                { l: 'Consultas no mês', v: totalStr, sub: totalMes > 0 ? 'Dados reais' : 'Sem dados ainda', cls: 'text-sky-700' },
+                { l: 'Tempo médio espera', v: tempoStr, sub: tempoMedioMin !== null ? 'Calculado da fila' : 'Sem dados ainda', cls: 'text-brand-600' },
+                { l: 'Taxa absenteísmo', v: '—', sub: 'Em breve', cls: 'text-amber-500' },
+                { l: 'Especialidades ativas', v: espAtivas > 0 ? String(espAtivas) : '—', sub: espAtivas > 0 ? 'Com consultas no mês' : 'Sem dados ainda', cls: 'text-violet-500' },
               ].map((k) => (
                 <div key={k.l} className="card px-5 py-4">
                   <div className="kpi-label">{k.l}</div>
@@ -103,13 +170,13 @@ export default function GestaoPage() {
               <div className="card-pad">
                 <div className="card-title">Consultas por especialidade</div>
                 <div className="space-y-2.5">
-                  {ESPS.map((e) => (
+                  {espData.map((e) => (
                     <div key={e.esp} className="flex items-center gap-2.5">
                       <span className="w-28 shrink-0 truncate text-[11px] text-slate-500">{e.esp}</span>
                       <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
                         <div
                           className="h-full rounded-full transition-all"
-                          style={{ width: `${(e.val / maxVal) * 100}%`, background: e.cor }}
+                          style={{ width: `${(e.val / maxValReal) * 100}%`, background: e.cor }}
                         />
                       </div>
                       <span className="min-w-6 text-right text-[11px] font-bold text-slate-900">{e.val}</span>
@@ -122,7 +189,7 @@ export default function GestaoPage() {
               <div className="card-pad">
                 <div className="card-title">Produção por profissional</div>
                 <div className="space-y-2">
-                  {PROD.map((p) => (
+                  {prodData.map((p) => (
                     <div key={p.nome} className="flex items-center gap-2.5 rounded-lg bg-slate-50 px-3 py-2">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-bold text-slate-900">{p.nome.split(' ').slice(0, 2).join(' ')}</div>
@@ -151,7 +218,7 @@ export default function GestaoPage() {
                 </tr>
               </thead>
               <tbody>
-                {PROD.map((p) => (
+                {prodData.map((p) => (
                   <tr key={p.nome} className="hover:bg-slate-50">
                     <td className="table-td font-semibold">{p.nome}</td>
                     <td className="table-td">{p.esp}</td>

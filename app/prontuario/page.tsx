@@ -459,6 +459,7 @@ export default function ProntuarioPage() {
       esp: paciente.esp || 'Consulta médica',
       dados_triagem: paciente.dados_triagem || null,
     })
+    localStorage.setItem('paciente_em_atendimento', JSON.stringify({ nome: paciente.nome, cpf: paciente.cpf || '' }))
     setShowModal(false)
     setBuscaPaciente('')
     setResultadosBusca([])
@@ -494,6 +495,7 @@ export default function ProntuarioPage() {
     }
     pacientes.push(paciente)
     localStorage.setItem('pacientes', JSON.stringify(pacientes))
+    localStorage.setItem('paciente_em_atendimento', JSON.stringify({ nome: paciente.nome, cpf: paciente.cpf || '' }))
     setPacienteAtual(paciente)
     setDocPaciente(paciente.nome)
     setDocCpf(paciente.cpf || '')
@@ -568,6 +570,7 @@ export default function ProntuarioPage() {
       localStorage.setItem('pacientes_triagem', JSON.stringify(pacientes))
     }
 
+    localStorage.removeItem('paciente_em_atendimento')
     setFinalizado(true)
     setTimeout(() => {
       setFinalizado(false)

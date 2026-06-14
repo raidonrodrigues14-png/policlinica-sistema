@@ -73,7 +73,29 @@ export default function AgendarPage() {
   const minDataStr = minData.toISOString().slice(0, 10)
 
   function confirmar() {
-    setProto(gerarProtocolo())
+    const protocolo = gerarProtocolo()
+    setProto(protocolo)
+
+    // Persiste o agendamento no localStorage
+    const agendamento = {
+      id: protocolo,
+      nome,
+      cpf,
+      nasc,
+      esp,
+      data,
+      hora,
+      proto: protocolo,
+      medico: MEDICOS[esp]?.[0]?.nome || '',
+      criado_em: new Date().toISOString(),
+    }
+    try {
+      const stored = localStorage.getItem('agendamentos')
+      const lista = stored ? JSON.parse(stored) : []
+      lista.push(agendamento)
+      localStorage.setItem('agendamentos', JSON.stringify(lista))
+    } catch {}
+
     setEtapa('sucesso')
   }
 

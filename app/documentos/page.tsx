@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Printer, Pill, ClipboardList, FileCheck2, FlaskConical, ArrowRightLeft,
@@ -23,11 +23,34 @@ export default function DocumentosPage() {
   const printRef = useRef<HTMLDivElement>(null)
   const [tipo, setTipo] = useState<DocTipo>('receita')
 
-  // Dados compartilhados
-  const [paciente, setPaciente] = useState('Joao Santos')
-  const [cpf, setCpf] = useState('987.654.321-00')
-  const [medico, setMedico] = useState('Dr. Roberto Nunes')
-  const [crm, setCrm] = useState('CRM/MA 12345')
+  // Dados compartilhados — preenchidos pelo localStorage ao montar
+  const [paciente, setPaciente] = useState('')
+  const [cpf, setCpf] = useState('')
+  const [medico, setMedico] = useState('')
+  const [crm, setCrm] = useState('')
+
+  // Carrega paciente em atendimento e dados do médico logado
+  useEffect(() => {
+    try {
+      const p = localStorage.getItem('paciente_em_atendimento')
+      if (p) {
+        const parsed = JSON.parse(p)
+        setPaciente(parsed.nome || '')
+        setCpf(parsed.cpf || '')
+      }
+    } catch {}
+    try {
+      const u = localStorage.getItem('usuario')
+      if (u) {
+        const parsed = JSON.parse(u)
+        const nome = parsed.nome || ''
+        setMedico(nome)
+        // CRM pode vir do perfil estendido; por ora usa o do localStorage se existir
+        const crm = parsed.crm || ''
+        setCrm(crm)
+      }
+    } catch {}
+  }, [])
 
   // Receituário
   const [tipoRec, setTipoRec] = useState('simples')

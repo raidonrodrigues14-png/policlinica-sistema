@@ -207,6 +207,32 @@ export default function RecepcaoPage() {
     }
   }, [])
 
+  // Carrega agendamentos de hoje e insere na fila se ainda não estiverem
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('agendamentos')
+      if (!stored) return
+      const hoje = new Date().toISOString().slice(0, 10)
+      const agendados: any[] = JSON.parse(stored).filter((a: any) => a.data === hoje)
+      if (agendados.length === 0) return
+      setFila((filaAtual) => {
+        const idsExistentes = new Set(filaAtual.map((f) => f.id))
+        const novos = agendados
+          .filter((a) => !idsExistentes.has(`ag_${a.id}`))
+          .map((a, i) => ({
+            id: `ag_${a.id}`,
+            num: String(100 + i + filaAtual.length).padStart(3, '0'),
+            nome: a.nome,
+            esp: a.esp,
+            status: 'aguardando_triagem' as const,
+            cons: 'Agendado',
+            chegada: `${a.data}T${a.hora}:00`,
+          }))
+        return novos.length > 0 ? [...filaAtual, ...novos] : filaAtual
+      })
+    } catch {}
+  }, [])
+
   // Sincroniza fila com o painel TV
   useEffect(() => {
     const tvFila = fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status))
