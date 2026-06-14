@@ -4,7 +4,7 @@ import {
   Stethoscope, Inbox, Plus, X, CheckCircle2, Save, Loader2, Printer,
   ClipboardList, Activity, FlaskConical, SearchCheck, Pill, ArrowRightLeft,
   CalendarDays, Clock, Microscope, ChevronLeft, ChevronRight, UserRound,
-  History,
+  History, Video, VideoOff, Mic, MicOff, PhoneOff, MonitorSmartphone,
   type LucideIcon,
 } from 'lucide-react'
 import AppShell from '@/components/AppShell'
@@ -134,8 +134,20 @@ const ABAS: { id: string; l: string; icon: LucideIcon }[] = [
   { id: 'conduta', l: 'Conduta', icon: Pill },
   { id: 'encaminh', l: 'Encaminham.', icon: ArrowRightLeft },
   { id: 'agendamento', l: 'Agendar Consulta', icon: CalendarDays },
+  { id: 'teleconsulta', l: 'Teleconsulta', icon: MonitorSmartphone },
   { id: 'registroTardio', l: 'Registro Tardio', icon: Clock },
   { id: 'resultadosExames', l: 'Result. Exames', icon: Microscope },
+]
+
+const ESPECIALISTAS_TELE = [
+  { id: 'tc1', nome: 'Dr. André Carvalho',   esp: 'Cardiologia',    crm: 'CRM/MA 12345', status: 'disponivel', avatar: 'AC' },
+  { id: 'tc2', nome: 'Dra. Fernanda Lima',   esp: 'Neurologia',     crm: 'CRM/MA 23456', status: 'disponivel', avatar: 'FL' },
+  { id: 'tc3', nome: 'Dr. Ricardo Souza',    esp: 'Ortopedia',      crm: 'CRM/MA 34567', status: 'ocupado',    avatar: 'RS' },
+  { id: 'tc4', nome: 'Dra. Camila Torres',   esp: 'Dermatologia',   crm: 'CRM/MA 45678', status: 'disponivel', avatar: 'CT' },
+  { id: 'tc5', nome: 'Dr. Paulo Mendes',     esp: 'Endocrinologia', crm: 'CRM/MA 56789', status: 'offline',    avatar: 'PM' },
+  { id: 'tc6', nome: 'Dra. Juliana Costa',   esp: 'Psiquiatria',    crm: 'CRM/MA 67890', status: 'disponivel', avatar: 'JC' },
+  { id: 'tc7', nome: 'Dr. Marcos Dias',      esp: 'Urologia',       crm: 'CRM/MA 78901', status: 'ocupado',    avatar: 'MD' },
+  { id: 'tc8', nome: 'Dra. Beatriz Nunes',   esp: 'Ginecologia',    crm: 'CRM/MA 89012', status: 'disponivel', avatar: 'BN' },
 ]
 
 // ── Busca de medicamentos (ANVISA via rota interna, fallback local) ──
@@ -258,6 +270,19 @@ export default function ProntuarioPage() {
     exame: '', dataRealizacao: '', dataResultado: '', resultado: 'Normal', descricao: '',
   })
   const [examesRealizados, setExamesRealizados] = useState<any[]>([])
+
+  // Teleconsulta
+  const [teleEsp, setTeleEsp] = useState<any>(null)
+  const [teleAtiva, setTeleAtiva] = useState(false)
+  const [teleMudo, setTeleMudo] = useState(false)
+  const [teleCamOff, setTeleCamOff] = useState(false)
+  const [teleNota, setTeleNota] = useState('')
+  const [teleHistorico, setTeleHistorico] = useState<any[]>(() => {
+    try { return JSON.parse(localStorage.getItem('teleconsultas') || '[]') } catch { return [] }
+  })
+  const [teleTempo, setTeleTempo] = useState(0)
+  const teleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [teleFiltroEsp, setTeleFiltroEsp] = useState('')
 
   // Fila de pacientes
   const [filaMedica, setFilaMedica] = useState<any[]>([])
@@ -1469,6 +1494,229 @@ export default function ProntuarioPage() {
                         Iniciar consulta <ChevronRight size={15} />
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* TELECONSULTA */}
+                {aba === 'teleconsulta' && (
+                  <div className="space-y-4">
+                    {!teleAtiva ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 text-[13px] font-bold text-slate-900">
+                              <MonitorSmartphone size={16} className="text-brand-600" />
+                              Teleconsulta com Especialistas
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-slate-500">
+                              Conecte-se a um especialista para interconsulta remota
+                              {pacienteAtual && <> · Paciente: <strong>{pacienteAtual.nome}</strong></>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                            <span className="font-semibold text-emerald-700">
+                              {ESPECIALISTAS_TELE.filter((e) => e.status === 'disponivel').length} online
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Filtro de especialidade */}
+                        <div className="flex flex-wrap gap-2">
+                          {['', 'Cardiologia', 'Neurologia', 'Ortopedia', 'Dermatologia', 'Endocrinologia', 'Psiquiatria', 'Urologia', 'Ginecologia'].map((esp) => (
+                            <button
+                              key={esp}
+                              onClick={() => setTeleFiltroEsp(esp)}
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                                teleFiltroEsp === esp
+                                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                              }`}
+                            >
+                              {esp === '' ? 'Todos' : esp}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Grid de especialistas */}
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {ESPECIALISTAS_TELE.filter((e) => !teleFiltroEsp || e.esp === teleFiltroEsp).map((esp) => {
+                            const cfg =
+                              esp.status === 'disponivel'
+                                ? { dot: 'bg-emerald-400', label: 'Disponivel', color: '#10b981', disabled: false }
+                                : esp.status === 'ocupado'
+                                ? { dot: 'bg-amber-400', label: 'Em consulta', color: '#f59e0b', disabled: true }
+                                : { dot: 'bg-slate-300', label: 'Offline', color: '#94a3b8', disabled: true }
+                            return (
+                              <div key={esp.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                                <div className="relative shrink-0">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700">
+                                    {esp.avatar}
+                                  </div>
+                                  <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white ${cfg.dot}`} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[13px] font-bold text-slate-900">{esp.nome}</div>
+                                  <div className="text-[11px] text-slate-500">{esp.esp} · {esp.crm}</div>
+                                  <div className="mt-0.5 text-[10px] font-semibold" style={{ color: cfg.color }}>{cfg.label}</div>
+                                </div>
+                                <button
+                                  disabled={cfg.disabled}
+                                  onClick={() => {
+                                    setTeleEsp(esp)
+                                    setTeleAtiva(true)
+                                    setTeleTempo(0)
+                                    setTeleNota('')
+                                    teleTimerRef.current = setInterval(() => setTeleTempo((t) => t + 1), 1000)
+                                  }}
+                                  className={`btn btn-sm text-white ${cfg.disabled ? 'cursor-not-allowed bg-slate-300' : 'bg-brand-600 hover:bg-brand-700'}`}
+                                >
+                                  <Video size={13} /> Conectar
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Historico */}
+                        {teleHistorico.length > 0 && (
+                          <div className="card-pad">
+                            <div className="card-title">Historico de Teleconsultas</div>
+                            <div className="space-y-2">
+                              {[...teleHistorico].reverse().slice(0, 5).map((h: any) => (
+                                <div key={h.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700">
+                                    {h.avatar}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[13px] font-semibold text-slate-900">{h.especialista}</div>
+                                    <div className="text-[11px] text-slate-500">{h.especialidade} · {h.paciente || '—'}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-[11px] font-bold text-slate-700">{h.data}</div>
+                                    <div className="text-[10px] text-slate-400">{h.duracao}</div>
+                                  </div>
+                                  <span className="badge-green">Realizada</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* Tela de chamada ativa */
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+                            <span className="text-[13px] font-bold text-emerald-800">Chamada em andamento</span>
+                            <span className="font-mono text-[13px] font-bold text-emerald-700">
+                              {String(Math.floor(teleTempo / 60)).padStart(2, '0')}:{String(teleTempo % 60).padStart(2, '0')}
+                            </span>
+                          </div>
+                          <div className="text-[12px] font-semibold text-emerald-700">
+                            {teleEsp?.nome} · {teleEsp?.esp}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-[1fr_220px] gap-3">
+                          {/* Video principal */}
+                          <div className="relative flex min-h-[340px] items-center justify-center overflow-hidden rounded-2xl bg-slate-900">
+                            {teleCamOff ? (
+                              <div className="flex flex-col items-center gap-3 text-slate-500">
+                                <VideoOff size={40} />
+                                <span className="text-sm">Camera desativada</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-3">
+                                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-700 text-3xl font-bold text-white">
+                                  {teleEsp?.avatar}
+                                </div>
+                                <div className="text-sm font-semibold text-white">{teleEsp?.nome}</div>
+                                <div className="text-[11px] text-slate-400">{teleEsp?.esp}</div>
+                              </div>
+                            )}
+                            <div className="absolute bottom-3 right-3 flex h-20 w-28 items-center justify-center rounded-xl bg-slate-700 text-slate-400">
+                              <UserRound size={28} />
+                            </div>
+                            {teleMudo && (
+                              <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white">
+                                <MicOff size={11} /> Mudo
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Painel lateral */}
+                          <div className="flex flex-col gap-3">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Paciente</div>
+                              <div className="text-[13px] font-bold text-slate-900">{pacienteAtual?.nome || '—'}</div>
+                              <div className="mt-0.5 text-[11px] text-slate-500">{pacienteAtual?.esp || ''}</div>
+                            </div>
+                            <div className="flex-1 rounded-xl border border-slate-200 bg-white p-3">
+                              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">Notas da interconsulta</div>
+                              <textarea
+                                className="min-h-[140px] w-full resize-none rounded-lg bg-slate-50 p-2 text-[12px] text-slate-800 outline-none focus:ring-1 focus:ring-brand-400"
+                                placeholder="Registre orientacoes, condutas e pareceres do especialista..."
+                                value={teleNota}
+                                onChange={(e) => setTeleNota(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Controles */}
+                        <div className="flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => setTeleMudo((m) => !m)}
+                            title={teleMudo ? 'Ativar microfone' : 'Silenciar'}
+                            className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition-colors ${teleMudo ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            {teleMudo ? <MicOff size={18} /> : <Mic size={18} />}
+                          </button>
+                          <button
+                            onClick={() => setTeleCamOff((c) => !c)}
+                            title={teleCamOff ? 'Ativar camera' : 'Desativar camera'}
+                            className={`flex h-12 w-12 items-center justify-center rounded-full border-2 transition-colors ${teleCamOff ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            {teleCamOff ? <VideoOff size={18} /> : <Video size={18} />}
+                          </button>
+                          <button
+                            title="Encerrar chamada"
+                            className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg transition-colors hover:bg-rose-700"
+                            onClick={() => {
+                              if (teleTimerRef.current) clearInterval(teleTimerRef.current)
+                              const dur = `${String(Math.floor(teleTempo / 60)).padStart(2, '0')}:${String(teleTempo % 60).padStart(2, '0')}`
+                              const nova = {
+                                id: Date.now(),
+                                especialista: teleEsp?.nome,
+                                especialidade: teleEsp?.esp,
+                                avatar: teleEsp?.avatar,
+                                paciente: pacienteAtual?.nome || '',
+                                data: new Date().toLocaleDateString('pt-BR'),
+                                duracao: dur,
+                                notas: teleNota,
+                              }
+                              const hist = [...teleHistorico, nova]
+                              setTeleHistorico(hist)
+                              localStorage.setItem('teleconsultas', JSON.stringify(hist))
+                              setTeleAtiva(false)
+                              setTeleEsp(null)
+                              setTeleMudo(false)
+                              setTeleCamOff(false)
+                            }}
+                          >
+                            <PhoneOff size={22} />
+                          </button>
+                        </div>
+
+                        {teleNota && (
+                          <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[12px] text-brand-800">
+                            <strong>Notas salvas automaticamente</strong> ao encerrar a chamada.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
