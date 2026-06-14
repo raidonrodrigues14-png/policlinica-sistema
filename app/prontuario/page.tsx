@@ -253,6 +253,8 @@ export default function ProntuarioPage() {
     especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '',
   })
   const [agendamentoSucesso, setAgendamentoSucesso] = useState(false)
+  const [agendamentoProtocolo, setAgendamentoProtocolo] = useState('')
+  const [agendamentoConfirmado, setAgendamentoConfirmado] = useState<any>(null)
   const [agendamentosLista, setAgendamentosLista] = useState<any[]>([])
 
   // Registro tardio
@@ -417,8 +419,32 @@ export default function ProntuarioPage() {
       localStorage.setItem('pacientes', JSON.stringify(pacientes))
     }
 
+    const protocolo = Math.random().toString(36).substr(2, 8).toUpperCase()
+    setAgendamentoProtocolo(protocolo)
+    setAgendamentoConfirmado({ ...novoAgendamento, protocolo })
     setAgendamentoSucesso(true)
-    setTimeout(() => setAgendamentoSucesso(false), 3000)
+
+    // Disparo automático WhatsApp se tiver telefone
+    const tel = agendamento.telefone?.replace(/\D/g, '')
+    if (tel) {
+      const dataFmt = agendamento.dataAgendamento
+        ? agendamento.dataAgendamento.split('-').reverse().join('/')
+        : ''
+      const msg = encodeURIComponent(
+        `✅ *Agendamento Confirmado!*\n\n` +
+        `Olá, ${agendamento.nome}!\n` +
+        `Seu agendamento foi confirmado com sucesso.\n\n` +
+        `📋 *Protocolo:* ${protocolo}\n` +
+        `👤 *Paciente:* ${agendamento.nome}\n` +
+        `🩺 *Especialidade:* ${agendamento.especialidade}\n` +
+        `👨‍⚕️ *Médico:* ${agendamento.profissional || 'A definir'}\n` +
+        `📅 *Data e hora:* ${dataFmt} às ${agendamento.horario}\n` +
+        `📍 *Local:* Policlínica Municipal\n\n` +
+        `Chegue 15 minutos antes com documento de identidade e cartão do SUS.`
+      )
+      window.open(`https://wa.me/55${tel}?text=${msg}`, '_blank')
+    }
+
     setAgendamento({
       nome: '', cpf: '', dataNascimento: '', sexo: 'Masculino', municipio: '',
       especialidade: 'Clínica Geral', dataAgendamento: '', horario: '09:00', profissional: '', observacoes: '', telefone: '',
@@ -1106,9 +1132,47 @@ export default function ProntuarioPage() {
                         <CalendarDays size={16} className="text-brand-600" /> Agendar Consulta
                       </div>
 
-                      {agendamentoSucesso && (
-                        <div className="mb-4 flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] font-semibold text-emerald-800">
-                          <CheckCircle2 size={15} /> Consulta agendada com sucesso!
+                      {agendamentoSucesso && agendamentoConfirmado && (
+                        <div className="mb-4 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md">
+                          {/* Header */}
+                          <div className="flex flex-col items-center gap-1 bg-emerald-600 px-6 py-5 text-center text-white">
+                            <CheckCircle2 size={32} className="mb-1 opacity-90" />
+                            <div className="text-xl font-extrabold">Agendado com sucesso!</div>
+                            <div className="text-[13px] font-medium opacity-80">Seu agendamento foi confirmado</div>
+                          </div>
+
+                          {/* Protocolo */}
+                          <div className="mx-6 mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Número de protocolo</div>
+                            <div className="mt-1 font-mono text-2xl font-extrabold tracking-widest text-emerald-800">{agendamentoProtocolo}</div>
+                            <div className="mt-0.5 text-[10px] text-emerald-500">Guarde este número</div>
+                          </div>
+
+                          {/* Detalhes */}
+                          <div className="divide-y divide-slate-100 px-6 py-3">
+                            {[
+                              { l: 'Paciente', v: agendamentoConfirmado.nome },
+                              { l: 'Especialidade', v: agendamentoConfirmado.especialidade },
+                              { l: 'Médico', v: agendamentoConfirmado.profissional || 'A definir' },
+                              { l: 'Data e hora', v: agendamentoConfirmado.dataAgendamento ? `${agendamentoConfirmado.dataAgendamento.split('-').reverse().join('/')} às ${agendamentoConfirmado.horario}` : agendamentoConfirmado.horario },
+                              { l: 'Local', v: 'Policlínica Municipal' },
+                            ].map(({ l, v }) => (
+                              <div key={l} className="flex items-center justify-between py-2.5">
+                                <span className="text-[12px] text-slate-400">{l}</span>
+                                <span className="text-[13px] font-bold text-slate-800">{v}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Fechar */}
+                          <div className="px-6 pb-4">
+                            <button
+                              onClick={() => { setAgendamentoSucesso(false); setAgendamentoConfirmado(null) }}
+                              className="w-full rounded-xl border border-slate-200 py-2 text-[12px] font-semibold text-slate-500 hover:bg-slate-50"
+                            >
+                              Fechar
+                            </button>
+                          </div>
                         </div>
                       )}
 
