@@ -315,11 +315,9 @@ function LembretesTab() {
   )
 }
 
-}
-
 export default function RecepcaoPage() {
   const usuario = useUsuario(['recepcionista'])
-  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel' | 'tv'>('fila')
+  const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel' | 'tv' | 'lembretes'>('fila')
   const [fila, setFila] = useState(() => {
     const now = Date.now()
     return FILA_DEMO.map((f, i) => ({
