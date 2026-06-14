@@ -64,14 +64,13 @@ export default function Login() {
         <div className="absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl" />
 
         <div className="relative">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500 text-2xl font-extrabold text-white">
-              +
-            </div>
-            <div>
-              <div className="text-sm font-bold text-white">PoliclínicaMed</div>
-              <div className="text-[11px] text-slate-500">Gestão Municipal de Saúde</div>
-            </div>
+          <div className="mb-10">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-prefeitura.svg"
+              alt="Prefeitura de Alto Alegre do Maranhão"
+              className="h-14 w-auto"
+            />
           </div>
 
           <h1 className="max-w-lg text-4xl leading-tight font-extrabold text-white">
