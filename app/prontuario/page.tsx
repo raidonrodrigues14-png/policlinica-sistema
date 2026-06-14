@@ -4,6 +4,7 @@ import {
   Stethoscope, Inbox, Plus, X, CheckCircle2, Save, Loader2, Printer,
   ClipboardList, Activity, FlaskConical, SearchCheck, Pill, ArrowRightLeft,
   CalendarDays, Clock, Microscope, ChevronLeft, ChevronRight, UserRound,
+  History,
   type LucideIcon,
 } from 'lucide-react'
 import AppShell from '@/components/AppShell'
@@ -125,6 +126,7 @@ const ST: Record<string, { badge: string; border: string; t: string }> = {
 }
 
 const ABAS: { id: string; l: string; icon: LucideIcon }[] = [
+  { id: 'historico', l: 'Histórico', icon: History },
   { id: 'anamnese', l: 'Anamnese', icon: ClipboardList },
   { id: 'exame', l: 'Exame Físico', icon: Activity },
   { id: 'resultados', l: 'Resultados', icon: FlaskConical },
@@ -301,6 +303,9 @@ export default function ProntuarioPage() {
   const [encs, setEncs] = useState<any[]>([])
   const [novoEnc, setNovoEnc] = useState({ esp: 'Cardiologia', tipo: 'Especialista', pri: 'Alta', just: '' })
 
+  // Histórico de atendimentos
+  const [historicoPaciente, setHistoricoPaciente] = useState<any[]>([])
+
   // ── Carregamento de dados do localStorage ────────────────────
   const carregarAgendamentos = () => {
     const stored = localStorage.getItem('agendamentos_consultas')
@@ -314,6 +319,13 @@ export default function ProntuarioPage() {
     const stored = localStorage.getItem('exames_realizados')
     if (stored) setExamesRealizados(JSON.parse(stored))
   }
+  const carregarHistoricoPaciente = (nome: string) => {
+    const stored = localStorage.getItem('historico_atendimentos')
+    if (!stored) { setHistoricoPaciente([]); return }
+    const todos: any[] = JSON.parse(stored)
+    setHistoricoPaciente(todos.filter((h) => h.paciente?.nome === nome).reverse())
+  }
+
   const carregarPacientesMedicos = () => {
     const pacientesStorage = localStorage.getItem('pacientes_triagem')
     if (pacientesStorage) {
@@ -454,6 +466,8 @@ export default function ProntuarioPage() {
     setDocPaciente(paciente.nome)
     setDocCpf(paciente.cpf || '')
     setRegistroTardio((prev) => ({ ...prev, cidadao: paciente.nome }))
+    carregarHistoricoPaciente(paciente.nome)
+    setAba('historico')
     if (paciente.dados_triagem) carregarDadosTriagem(paciente)
   }
 
@@ -514,6 +528,8 @@ export default function ProntuarioPage() {
     setDocCpf(paciente.cpf || '')
     setRegistroTardio((prev) => ({ ...prev, cidadao: paciente.nome }))
     setFinalizado(false)
+    carregarHistoricoPaciente(paciente.nome)
+    setAba('historico')
     carregarDadosTriagem(paciente)
     atualizarStatusPaciente(paciente.id, 'em_atendimento')
   }
@@ -1320,6 +1336,136 @@ export default function ProntuarioPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* HISTÓRICO */}
+                {aba === 'historico' && (
+                  <div className="space-y-4">
+                    <div className="card-pad">
+                      <div className="card-title flex items-center gap-2">
+                        <History size={16} className="text-brand-600" />
+                        Histórico de Atendimentos — {pacienteAtual?.nome}
+                      </div>
+
+                      {historicoPaciente.length === 0 ? (
+                        <div className="py-10 text-center text-slate-400">
+                          <History size={36} className="mx-auto mb-2 opacity-40" />
+                          <div className="text-sm font-semibold">Nenhum atendimento anterior registrado</div>
+                          <div className="mt-1 text-xs">Os atendimentos finalizados aparecerão aqui</div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {historicoPaciente.map((h: any, i: number) => (
+                            <details key={i} className="group rounded-xl border border-slate-200 bg-slate-50">
+                              <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 marker:hidden">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
+                                  {historicoPaciente.length - i}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[13px] font-semibold text-slate-900">
+                                    {h.data_atendimento
+                                      ? new Date(h.data_atendimento).toLocaleDateString('pt-BR', {
+                                          day: '2-digit', month: 'long', year: 'numeric',
+                                        })
+                                      : 'Data não registrada'}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500">
+                                    {h.medico ? `Dr(a). ${h.medico}` : 'Médico não informado'}
+                                    {h.diagnosticos?.length > 0 && (
+                                      <> · {h.diagnosticos.map((d: any) => d.codigo).join(', ')}</>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  {h.diagnosticos?.slice(0, 2).map((d: any) => (
+                                    <span key={d.id} className="badge-blue">{d.codigo}</span>
+                                  ))}
+                                  {(h.diagnosticos?.length ?? 0) > 2 && (
+                                    <span className="badge-gray">+{h.diagnosticos.length - 2}</span>
+                                  )}
+                                </div>
+                                <ChevronRight size={15} className="shrink-0 text-slate-400 transition-transform group-open:rotate-90" />
+                              </summary>
+
+                              <div className="border-t border-slate-200 px-4 py-3 text-[13px]">
+                                {/* Queixa */}
+                                {h.anamnese?.queixa && (
+                                  <div className="mb-3">
+                                    <div className="mb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Queixa</div>
+                                    <div className="text-slate-700">{h.anamnese.queixa}</div>
+                                  </div>
+                                )}
+
+                                {/* Diagnósticos */}
+                                {h.diagnosticos?.length > 0 && (
+                                  <div className="mb-3">
+                                    <div className="mb-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Diagnósticos</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {h.diagnosticos.map((d: any) => (
+                                        <span key={d.id} className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                                          {d.codigo} — {d.desc}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Conduta */}
+                                {(h.conduta?.trat || h.conduta?.orient) && (
+                                  <div className="mb-3">
+                                    <div className="mb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Conduta</div>
+                                    {h.conduta.trat && <div className="text-slate-700"><strong>Tratamento:</strong> {h.conduta.trat}</div>}
+                                    {h.conduta.orient && <div className="mt-1 text-slate-700"><strong>Orientações:</strong> {h.conduta.orient}</div>}
+                                    {h.conduta.retorno && <div className="mt-1 text-slate-500 text-[11px]">Retorno: {h.conduta.retorno}</div>}
+                                  </div>
+                                )}
+
+                                {/* Encaminhamentos */}
+                                {h.encaminhamentos?.length > 0 && (
+                                  <div className="mb-3">
+                                    <div className="mb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Encaminhamentos</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {h.encaminhamentos.map((e: any) => (
+                                        <span key={e.id} className={`rounded-md px-2 py-0.5 text-xs font-semibold ${priBadge(e.pri)}`}>
+                                          {e.esp} ({e.pri})
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Sinais vitais resumidos */}
+                                {h.exame_fisico?.vitais && Object.values(h.exame_fisico.vitais).some((v) => v) && (
+                                  <div>
+                                    <div className="mb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Sinais vitais</div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {[
+                                        { k: 'pas', l: 'PA Sis.' }, { k: 'pad', l: 'PA Dia.' },
+                                        { k: 'fc', l: 'FC' }, { k: 'temp', l: 'Temp.' },
+                                        { k: 'sat', l: 'SpO₂' }, { k: 'glic', l: 'Glicemia' },
+                                      ].map(({ k, l }) =>
+                                        h.exame_fisico.vitais[k] ? (
+                                          <span key={k} className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                                            <strong>{l}:</strong> {h.exame_fisico.vitais[k]}
+                                          </span>
+                                        ) : null
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button onClick={() => setAba('anamnese')} className="btn-primary">
+                        Iniciar consulta <ChevronRight size={15} />
+                      </button>
+                    </div>
                   </div>
                 )}
 

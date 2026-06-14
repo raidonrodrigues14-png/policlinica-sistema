@@ -1,11 +1,12 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ClipboardList, Tv, UserPlus, Megaphone, Stethoscope, ArrowRight, Search,
-  CheckCircle2, RefreshCw, MapPin, Loader2,
+  CheckCircle2, RefreshCw, MapPin, Loader2, Printer, Clock,
 } from 'lucide-react'
 import AppShell from '@/components/AppShell'
 import { useUsuario } from '@/lib/auth'
+import { useReactToPrint } from 'react-to-print'
 
 const FILA_DEMO = [
   { id: '1', num: '016', nome: 'Joao Santos', esp: 'Clinica Medica', status: 'aguardando_triagem', cons: 'Consultorio 01' },
@@ -142,10 +143,43 @@ async function buscarPacienteCadSUS(termo: string, tipo: 'cpf' | 'nome'): Promis
 
 const FORM_VAZIO = { nome: '', cpf: '', nascimento: '', sexo: 'M', municipio: '', especialidade: '', cns: '', telefone: '', endereco: '' }
 
+function TempoEspera({ chegada }: { chegada?: string }) {
+  const [min, setMin] = useState(0)
+  useEffect(() => {
+    if (!chegada) return
+    const calc = () => setMin(Math.floor((Date.now() - new Date(chegada).getTime()) / 60000))
+    calc()
+    const t = setInterval(calc, 30000)
+    return () => clearInterval(t)
+  }, [chegada])
+  if (!chegada) return null
+  const cls =
+    min < 20 ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    : min < 40 ? 'bg-amber-100 text-amber-700 border-amber-200'
+    : 'bg-rose-100 text-rose-700 border-rose-200'
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  const label = min < 60 ? `${min}m` : `${h}h${m > 0 ? m + 'm' : ''}`
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-bold ${cls}`}
+    >
+      <Clock size={10} />
+      {label}
+    </span>
+  )
+}
+
 export default function RecepcaoPage() {
   const usuario = useUsuario(['recepcionista'])
   const [aba, setAba] = useState<'fila' | 'cadastro' | 'painel'>('fila')
-  const [fila, setFila] = useState(FILA_DEMO)
+  const [fila, setFila] = useState(() => {
+    const now = Date.now()
+    return FILA_DEMO.map((f, i) => ({
+      ...f,
+      chegada: new Date(now - (FILA_DEMO.length - i) * 8 * 60 * 1000).toISOString(),
+    }))
+  })
   const [form, setForm] = useState(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg] = useState('')
@@ -162,11 +196,22 @@ export default function RecepcaoPage() {
   const [pisc, setPisc] = useState(false)
   const [autoMode, setAutoMode] = useState(false)
 
+  // Ficha de impressão
+  const fichaRef = useRef<HTMLDivElement>(null)
+  const [fichaImprimir, setFichaImprimir] = useState<{ nome: string; num: string; esp: string; chegada: string } | null>(null)
+  const handlePrint = useReactToPrint({ contentRef: fichaRef })
+
   useEffect(() => {
     if (!localStorage.getItem('pacientes_triagem')) {
       localStorage.setItem('pacientes_triagem', JSON.stringify([]))
     }
   }, [])
+
+  // Sincroniza fila com o painel TV
+  useEffect(() => {
+    const tvFila = fila.filter((f) => ['aguardando_triagem', 'aguardando_medico'].includes(f.status))
+    localStorage.setItem('tv_fila', JSON.stringify(tvFila))
+  }, [fila])
 
   useEffect(() => {
     const t = setInterval(() => setHora(new Date().toLocaleTimeString('pt-BR')), 1000)
@@ -332,6 +377,7 @@ export default function RecepcaoPage() {
     setHistorico((h) => [paciente, ...h].slice(0, 5))
     setPisc(true)
     setTimeout(() => setPisc(false), 1500)
+    localStorage.setItem('tv_chamada_atual', JSON.stringify({ ...paciente, timestamp: new Date().toISOString() }))
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
       const u = new SpeechSynthesisUtterance(`${paciente.nome}, dirija-se ao ${paciente.cons}.`)
@@ -353,10 +399,12 @@ export default function RecepcaoPage() {
 
     const novoId = String(Date.now())
     const novoNum = String(20 + fila.length).padStart(3, '0')
+    const chegadaAgora = new Date().toISOString()
     const novoPaciente = {
       id: novoId, num: novoNum, nome: form.nome,
       esp: form.especialidade || 'Clinica Medica',
       status: 'aguardando_triagem', cons: 'Aguardando sala',
+      chegada: chegadaAgora,
     }
 
     const pacientesStorage = localStorage.getItem('pacientes')
@@ -374,13 +422,14 @@ export default function RecepcaoPage() {
     }
 
     setFila((f) => [...f, novoPaciente])
+    setFichaImprimir({ nome: form.nome, num: novoNum, esp: form.especialidade || 'Clinica Medica', chegada: chegadaAgora })
     avisar(`Paciente ${form.nome} cadastrado! Ficha #${novoNum} emitida.${cpfEncontrado ? ' Dados importados do CadSUS.' : ''}`, 'ok')
     setForm(FORM_VAZIO)
     setCpfEncontrado(false)
     setMostrarResultados(false)
     setResultadosBusca([])
     setSalvando(false)
-    setTimeout(() => setAba('fila'), 3000)
+    setTimeout(() => setAba('fila'), 4000)
   }
 
   const MSG_CLS = {
@@ -446,7 +495,7 @@ export default function RecepcaoPage() {
             {aba === 'fila' && (
               <div>
                 <div className="mb-4 flex items-center justify-between">
-                  <button onClick={() => setFila([...FILA_DEMO])} className="btn-ghost btn-sm">
+                  <button onClick={() => { const now = Date.now(); setFila(FILA_DEMO.map((f, i) => ({ ...f, chegada: new Date(now - (FILA_DEMO.length - i) * 8 * 60 * 1000).toISOString() }))) }} className="btn-ghost btn-sm">
                     <RefreshCw size={13} /> Resetar fila
                   </button>
                   <span className="text-xs text-slate-500">
@@ -464,7 +513,10 @@ export default function RecepcaoPage() {
                         <span className="min-w-12 font-mono text-base font-extrabold text-brand-600">#{f.num}</span>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-bold text-slate-900">{f.nome}</div>
-                          <div className="text-[11px] text-slate-400">{f.esp} · {f.cons}</div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                            {f.esp} · {f.cons}
+                            <TempoEspera chegada={(f as any).chegada} />
+                          </div>
                         </div>
                         <span className={cfg.cls}>{cfg.label}</span>
                         {aguardandoTriagem && (
@@ -716,6 +768,51 @@ export default function RecepcaoPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal — Ficha de atendimento */}
+      {fichaImprimir && (
+        <div className="modal-overlay" onClick={() => setFichaImprimir(null)}>
+          <div className="modal-panel max-w-xs text-center" onClick={(e) => e.stopPropagation()}>
+            <CheckCircle2 size={36} className="mx-auto mb-2 text-emerald-500" />
+            <div className="mb-1 text-base font-bold text-slate-900">Ficha emitida!</div>
+            <div className="mb-5 text-sm text-slate-500">Paciente cadastrado na fila.</div>
+
+            {/* Conteúdo imprimível */}
+            <div
+              ref={fichaRef}
+              className="mb-5 rounded-xl border border-dashed border-slate-300 p-5 text-left"
+            >
+              <div className="mb-3 text-center">
+                <div className="text-sm font-bold">PoliclínicaMed</div>
+                <div className="text-[11px] text-slate-400">Gestão Municipal de Saúde</div>
+              </div>
+              <div className="mb-4 text-center font-mono text-6xl font-extrabold text-brand-600">
+                #{fichaImprimir.num}
+              </div>
+              <div className="space-y-1.5 text-[13px] text-slate-800">
+                <div><span className="font-bold">Paciente:</span> {fichaImprimir.nome}</div>
+                <div><span className="font-bold">Especialidade:</span> {fichaImprimir.esp}</div>
+                <div>
+                  <span className="font-bold">Horário:</span>{' '}
+                  {new Date(fichaImprimir.chegada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <div className="mt-4 text-center text-[11px] text-slate-400">
+                Aguarde ser chamado(a) pelo painel de chamadas
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => handlePrint()} className="btn-primary flex-1">
+                <Printer size={15} /> Imprimir ficha
+              </button>
+              <button onClick={() => setFichaImprimir(null)} className="btn-secondary">
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   )
 }
